@@ -21,6 +21,7 @@ import {
   StateStorageError,
   type StateStore,
   type RepositoryState,
+  type FailureRecord,
 } from "./sync/state.js";
 import { createGitHubStateStore } from "./sync/github-state-store.js";
 
@@ -62,6 +63,7 @@ export const runDiscoveryCli = async (
       error?: { code: string; message: string };
       skipped?: boolean;
     })[] = [];
+    const failures: FailureRecord[] = [];
     let projectReadCount = 0;
     let failedRepositoryCount = 0;
     let emptyRepositoryCount = 0;
@@ -74,15 +76,19 @@ export const runDiscoveryCli = async (
         fullName: repository.fullName,
         defaultBranch: repository.defaultBranch,
       };
-      const failed = (code: string): RepositoryState => ({
-        ...identity,
-        lastSuccessfulHeadSha: previous?.lastSuccessfulHeadSha ?? null,
-        lastSuccessfulAt: previous?.lastSuccessfulAt ?? null,
-        lastResult: "failure",
-        lastErrorCode: code,
-      });
+      let head: string | null = null;
+      const failed = (code: string): RepositoryState => {
+        failures.push({ ...identity, headSha: head, failedAt: now(), code });
+        return {
+          ...identity,
+          lastSuccessfulHeadSha: previous?.lastSuccessfulHeadSha ?? null,
+          lastSuccessfulAt: previous?.lastSuccessfulAt ?? null,
+          lastResult: "failure",
+          lastErrorCode: code,
+        };
+      };
       try {
-        const head = await resolveDefaultBranchHead(client, repository);
+        head = await resolveDefaultBranchHead(client, repository);
         if (previous && shouldSkip(previous, head)) {
           state.repositories[id] = {
             ...previous,
@@ -125,7 +131,11 @@ export const runDiscoveryCli = async (
           });
       }
     }
-    await dependencies.stateStore.save(state).catch(() => {
+    await (
+      failures.length > 0
+        ? dependencies.stateStore.save(state, failures)
+        : dependencies.stateStore.save(state)
+    ).catch(() => {
       throw new StateStorageError();
     });
     writeOutput(

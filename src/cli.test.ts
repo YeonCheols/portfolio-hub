@@ -91,6 +91,17 @@ describe("runDiscoveryCli", () => {
       writeError: vi.fn(),
     });
     expect(code).toBe(1);
+    expect(store.save.mock.calls[0]).toEqual([
+      expect.anything(),
+      [
+        expect.objectContaining({
+          repositoryId: 1,
+          headSha: "b".repeat(40),
+          code: "CONTENT_INCOMPLETE",
+          failedAt: expect.any(String),
+        }),
+      ],
+    ]);
     expect((await store.load()).repositories["1"]).toMatchObject({
       lastSuccessfulHeadSha: "a".repeat(40),
       lastSuccessfulAt: "2026-11-11T00:00:00Z",
