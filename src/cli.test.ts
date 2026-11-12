@@ -1,3 +1,4 @@
+import { emptyState, type SyncState } from "./sync/state.js";
 import { Octokit } from "@octokit/rest";
 import { describe, expect, it, vi } from "vitest";
 
@@ -20,7 +21,269 @@ const withEmptyProjectFiles =
     return listFetch(input, init);
   };
 
+const memoryStore = (initial: SyncState = emptyState()) => {
+  let state = structuredClone(initial);
+  return {
+    load: vi.fn(async () => structuredClone(state)),
+    save: vi.fn(async (next: SyncState) => {
+      state = structuredClone(next);
+    }),
+  };
+};
+
 describe("runDiscoveryCli", () => {
+  it("수집 파일이 생략되면 성공 SHA를 앞당기지 않는다", async () => {
+    const store = memoryStore({
+      schemaVersion: 1,
+      repositories: {
+        "1": {
+          repositoryId: 1,
+          fullName: "side-projects-labs/demo",
+          defaultBranch: "master",
+          lastSuccessfulHeadSha: "a".repeat(40),
+          lastSuccessfulAt: "2026-11-11T00:00:00Z",
+          lastResult: "success",
+          lastErrorCode: null,
+        },
+      },
+    });
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const path = new URL(String(input)).pathname;
+      const data = path.endsWith("/repos")
+        ? [
+            {
+              id: 1,
+              name: "demo",
+              full_name: "side-projects-labs/demo",
+              html_url: "https://github.com/side-projects-labs/demo",
+              default_branch: "master",
+              visibility: "public",
+              archived: false,
+              fork: false,
+              pushed_at: null,
+            },
+          ]
+        : path.includes("/commits/")
+          ? { sha: "b".repeat(40) }
+          : [
+              {
+                name: "README.md",
+                path: "README.md",
+                type: "file",
+                size: 300_000,
+                sha: "blob",
+              },
+            ];
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const code = await runDiscoveryCli({
+      token: "fake",
+      stateStore: store,
+      createClient: () =>
+        new Octokit({
+          request: { fetch: fetchMock },
+          log: { debug() {}, info() {}, warn() {}, error() {} },
+        }),
+      writeOutput: vi.fn(),
+      writeError: vi.fn(),
+    });
+    expect(code).toBe(1);
+    expect((await store.load()).repositories["1"]).toMatchObject({
+      lastSuccessfulHeadSha: "a".repeat(40),
+      lastSuccessfulAt: "2026-11-11T00:00:00Z",
+      lastResult: "failure",
+      lastErrorCode: "CONTENT_INCOMPLETE",
+    });
+  });
+  it("이전 상태를 읽지 못하면 저장소 수집이나 상태 저장을 시작하지 않는다", async () => {
+    const store = memoryStore();
+    store.load.mockRejectedValue(new Error("private-state-error"));
+    const createClient = vi.fn();
+    const error = vi.fn();
+    expect(
+      await runDiscoveryCli({
+        token: "fake",
+        stateStore: store,
+        createClient,
+        writeOutput: vi.fn(),
+        writeError: error,
+      }),
+    ).toBe(1);
+    expect(createClient).not.toHaveBeenCalled();
+    expect(store.save).not.toHaveBeenCalled();
+    expect(JSON.parse(error.mock.calls[0][0]).error.code).toBe(
+      "STATE_STORAGE_FAILED",
+    );
+    expect(error.mock.calls[0][0]).not.toContain("private-state-error");
+  });
+  it("변경 HEAD 수집에 실패하면 이전 성공을 보존하고 재시도 성공 후에만 갱신한다", async () => {
+    const previous = {
+      repositoryId: 1,
+      fullName: "side-projects-labs/demo",
+      defaultBranch: "master",
+      lastSuccessfulHeadSha: "a".repeat(40),
+      lastSuccessfulAt: "2026-11-11T00:00:00Z",
+      lastResult: "success" as const,
+      lastErrorCode: null,
+    };
+    const store = memoryStore({
+      schemaVersion: 1,
+      repositories: { "1": previous },
+    });
+    let fail = true;
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const path = new URL(String(input)).pathname;
+      const json = (data: unknown, status = 200) =>
+        new Response(JSON.stringify(data), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+      if (path.endsWith("/repos"))
+        return json([
+          {
+            id: 1,
+            name: "demo",
+            full_name: previous.fullName,
+            html_url: "https://github.com/side-projects-labs/demo",
+            default_branch: "master",
+            visibility: "private",
+            archived: false,
+            fork: false,
+            pushed_at: null,
+          },
+        ]);
+      if (path.includes("/commits/")) return json({ sha: "b".repeat(40) });
+      if (fail) return json({ message: "private-error" }, 403);
+      return json([]);
+    });
+    const deps = {
+      token: "fake",
+      stateStore: store,
+      now: () => "2026-11-12T00:00:00Z",
+      createClient: () =>
+        new Octokit({
+          request: { fetch: fetchMock },
+          log: { debug() {}, info() {}, warn() {}, error() {} },
+        }),
+      writeOutput: vi.fn(),
+      writeError: vi.fn(),
+    };
+    expect(await runDiscoveryCli(deps)).toBe(1);
+    expect((await store.load()).repositories["1"]).toMatchObject({
+      lastSuccessfulHeadSha: previous.lastSuccessfulHeadSha,
+      lastSuccessfulAt: previous.lastSuccessfulAt,
+      lastResult: "failure",
+      lastErrorCode: "PERMISSION_DENIED",
+    });
+    fail = false;
+    expect(await runDiscoveryCli(deps)).toBe(0);
+    expect((await store.load()).repositories["1"]).toMatchObject({
+      lastSuccessfulHeadSha: "b".repeat(40),
+      lastSuccessfulAt: "2026-11-12T00:00:00Z",
+      lastResult: "success",
+      lastErrorCode: null,
+    });
+    const before = fetchMock.mock.calls.length;
+    expect(await runDiscoveryCli(deps)).toBe(0);
+    expect(fetchMock.mock.calls.length - before).toBe(2);
+    expect(JSON.stringify(await store.load())).not.toMatch(
+      /content|token|private-error/,
+    );
+  });
+  it("상태 저장 실패는 성공 결과를 출력하지 않고 안전한 저장 오류로 반환한다", async () => {
+    const store = memoryStore();
+    store.save.mockRejectedValue(new Error("state-token-secret"));
+    const fetchMock = vi.fn<typeof fetch>(
+      async () =>
+        new Response("[]", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const output = vi.fn();
+    const error = vi.fn();
+    const code = await runDiscoveryCli({
+      token: "fake",
+      stateStore: store,
+      createClient: () =>
+        new Octokit({
+          request: { fetch: fetchMock },
+          log: { debug() {}, info() {}, warn() {}, error() {} },
+        }),
+      writeOutput: output,
+      writeError: error,
+    });
+    expect(code).toBe(1);
+    expect(output).not.toHaveBeenCalled();
+    expect(JSON.parse(error.mock.calls[0][0]).error.code).toBe(
+      "STATE_STORAGE_FAILED",
+    );
+    expect(error.mock.calls[0][0]).not.toContain("state-token-secret");
+  });
+  it("성공 SHA가 같으면 파일 본문을 읽지 않고 상태를 변경하지 않는다", async () => {
+    const record = {
+      repositoryId: 1,
+      fullName: "side-projects-labs/demo",
+      defaultBranch: "master",
+      lastSuccessfulHeadSha: "a".repeat(40),
+      lastSuccessfulAt: "2026-11-11T00:00:00Z",
+      lastResult: "success" as const,
+      lastErrorCode: null,
+    };
+    const store = memoryStore({
+      schemaVersion: 1,
+      repositories: { "1": record },
+    });
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const path = new URL(String(input)).pathname;
+      const data = path.endsWith("/repos")
+        ? [
+            {
+              id: 1,
+              name: "demo",
+              full_name: record.fullName,
+              html_url: "https://github.com/side-projects-labs/demo",
+              default_branch: "master",
+              visibility: "public",
+              archived: false,
+              fork: false,
+              pushed_at: null,
+            },
+          ]
+        : { sha: "a".repeat(40) };
+      if (path.includes("/contents"))
+        throw new Error("Must not request contents");
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const output = vi.fn();
+    const code = await runDiscoveryCli({
+      token: "fake",
+      stateStore: store,
+      createClient: () =>
+        new Octokit({
+          request: { fetch: fetchMock },
+          log: { debug() {}, info() {}, warn() {}, error() {} },
+        }),
+      writeOutput: output,
+      writeError: vi.fn(),
+    });
+    expect(code).toBe(0);
+    expect(JSON.parse(output.mock.calls[0][0])).toMatchObject({
+      skippedRepositoryCount: 1,
+      projectReadCount: 0,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(store.save).toHaveBeenCalledWith({
+      schemaVersion: 1,
+      repositories: { "1": record },
+    });
+  });
   it("비공개 조회 실패 뒤에도 나머지를 수집하고 비공개 본문은 출력하지 않는다", async () => {
     const calls: string[] = [];
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
@@ -72,6 +335,8 @@ describe("runDiscoveryCli", () => {
     const writeOutput = vi.fn();
     const writeError = vi.fn();
     const code = await runDiscoveryCli({
+      stateStore: memoryStore(),
+      now: () => "2026-11-12T00:00:00Z",
       token: "fake",
       createClient: () =>
         new Octokit({
@@ -143,6 +408,8 @@ describe("runDiscoveryCli", () => {
     });
     const writeOutput = vi.fn();
     const code = await runDiscoveryCli({
+      stateStore: memoryStore(),
+      now: () => "2026-11-12T00:00:00Z",
       token: "fake",
       createClient: () =>
         new Octokit({
@@ -167,6 +434,8 @@ describe("runDiscoveryCli", () => {
     const writeError = vi.fn();
 
     const exitCode = await runDiscoveryCli({
+      stateStore: memoryStore(),
+      now: () => "2026-11-12T00:00:00Z",
       token: undefined,
       createClient,
       writeOutput,
@@ -226,6 +495,8 @@ describe("runDiscoveryCli", () => {
     const writeError = vi.fn();
 
     const exitCode = await runDiscoveryCli({
+      stateStore: memoryStore(),
+      now: () => "2026-11-12T00:00:00Z",
       token,
       createClient,
       writeOutput,
@@ -241,6 +512,7 @@ describe("runDiscoveryCli", () => {
       projectReadCount: 1,
       failedRepositoryCount: 0,
       emptyRepositoryCount: 0,
+      skippedRepositoryCount: 0,
       publicRepositories: [
         {
           id: 91,
@@ -307,6 +579,8 @@ describe("runDiscoveryCli", () => {
     const writeOutput = vi.fn();
 
     const exitCode = await runDiscoveryCli({
+      stateStore: memoryStore(),
+      now: () => "2026-11-12T00:00:00Z",
       token,
       createClient: () => client,
       writeOutput,
@@ -323,6 +597,7 @@ describe("runDiscoveryCli", () => {
       projectReadCount: 1,
       failedRepositoryCount: 0,
       emptyRepositoryCount: 0,
+      skippedRepositoryCount: 0,
       publicRepositories: [],
       restrictedRepositoryCount: 1,
     });
@@ -351,6 +626,8 @@ describe("runDiscoveryCli", () => {
     const writeError = vi.fn();
 
     const exitCode = await runDiscoveryCli({
+      stateStore: memoryStore(),
+      now: () => "2026-11-12T00:00:00Z",
       token,
       createClient: () => client,
       writeOutput,

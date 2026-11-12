@@ -29,6 +29,19 @@ const json = (body: unknown, status = 200) =>
   });
 
 describe("readProjectInformation", () => {
+  it("확인한 HEAD를 전달하면 브랜치를 다시 조회하지 않고 같은 커밋만 읽는다", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => json([]));
+    const result = await readProjectInformation(
+      new Octokit({ request: { fetch: fetchMock }, log: silent }),
+      repository,
+      "a".repeat(40),
+    );
+    expect(result.commitSha).toBe("a".repeat(40));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(url.pathname).not.toContain("/commits/");
+    expect(url.searchParams.get("ref")).toBe("a".repeat(40));
+  });
   it("파일 조회 실패는 원문 없이 안전한 오류로 반환한다", async () => {
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
       const path = new URL(String(input)).pathname;
