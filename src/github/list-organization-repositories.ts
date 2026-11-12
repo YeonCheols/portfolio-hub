@@ -84,7 +84,8 @@ export const listOrganizationRepositories = async (
   return [...uniqueRepositories.values()];
 };
 
-const toSafeDiscoveryError = (error: unknown): GitHubDiscoveryError => {
+export const toSafeDiscoveryError = (error: unknown): GitHubDiscoveryError => {
+  if (error instanceof GitHubDiscoveryError) return error;
   const response = getErrorResponse(error);
 
   if (response?.status === 401) {
