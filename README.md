@@ -14,7 +14,9 @@
 
 ## GitHub App 설정
 
-GitHub App을 `side-projects-labs` Organization에 설치하고 전체 저장소에 대해 Repository permissions의 `Metadata: read-only`만 부여합니다. 목록 조회 기능에는 코드 콘텐츠 권한이 필요하지 않습니다.
+GitHub App을 `side-projects-labs` Organization의 전체 저장소에 설치하고 Repository permissions에 `Metadata: read-only`와 `Contents: read-only`를 부여합니다. 공개·비공개·내부 저장소를 모두 조회 대상으로 삼습니다. `Contents`는 후속 README·콘텐츠 수집에 사용할 읽기 권한이며, 현재 구현은 목록과 메타데이터만 조회합니다.
+
+App 등록 권한을 변경한 뒤에는 Organization의 설치 설정에서도 새 권한을 승인해야 합니다. 워크플로는 설치 토큰에 `metadata: read`와 `contents: read`를 명시적으로 요청하므로 승인 전에는 토큰 발급이 실패할 수 있습니다.
 
 `portfolio-hub` 저장소 Actions 설정에 다음 값을 등록합니다.
 

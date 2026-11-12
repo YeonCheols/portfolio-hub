@@ -35,6 +35,7 @@ jobs:
           private-key: ${{ secrets.HUB_GITHUB_APP_PRIVATE_KEY }}
           owner: side-projects-labs
           permission-metadata: read
+          permission-contents: read
       - name: List organization repositories
         run: pnpm discover
         env:
