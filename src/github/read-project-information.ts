@@ -35,10 +35,10 @@ const isProjectFile = (name: string): boolean =>
   manifests.has(name) ||
   /\.(?:csproj|fsproj|sln)$/.test(name);
 
-export const readProjectInformation = async (
+export const resolveDefaultBranchHead = async (
   client: Pick<Octokit, "request">,
   repository: OrganizationRepository,
-): Promise<ProjectInformation> => {
+): Promise<string | null> => {
   try {
     const base = { owner: ORGANIZATION, repo: repository.name };
     const commit = await client
@@ -56,7 +56,24 @@ export const readProjectInformation = async (
           return null;
         throw error;
       });
-    if (!commit)
+    return commit?.data.sha ?? null;
+  } catch (error) {
+    throw toSafeDiscoveryError(error);
+  }
+};
+
+export const readProjectInformation = async (
+  client: Pick<Octokit, "request">,
+  repository: OrganizationRepository,
+  resolvedHead?: string | null,
+): Promise<ProjectInformation> => {
+  try {
+    const base = { owner: ORGANIZATION, repo: repository.name };
+    const ref =
+      resolvedHead === undefined
+        ? await resolveDefaultBranchHead(client, repository)
+        : resolvedHead;
+    if (ref === null)
       return {
         state: "empty",
         defaultBranch: repository.defaultBranch,
@@ -65,7 +82,6 @@ export const readProjectInformation = async (
         files: [],
         skippedFiles: [],
       };
-    const ref = commit.data.sha;
     const root = await client.request(
       "GET /repos/{owner}/{repo}/contents/{path}",
       { ...base, path: "", ref },

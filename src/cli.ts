@@ -11,11 +11,23 @@ import {
   toSafeDiscoveryError,
 } from "./github/list-organization-repositories.js";
 import type { OrganizationRepository } from "./github/list-organization-repositories.js";
-import { readProjectInformation } from "./github/read-project-information.js";
+import {
+  readProjectInformation,
+  resolveDefaultBranchHead,
+} from "./github/read-project-information.js";
 import type { ProjectInformation } from "./github/read-project-information.js";
+import {
+  shouldSkip,
+  StateStorageError,
+  type StateStore,
+  type RepositoryState,
+} from "./sync/state.js";
+import { createGitHubStateStore } from "./sync/github-state-store.js";
 
 export type DiscoveryCliDependencies = {
   token: string | undefined;
+  stateStore: StateStore;
+  now?: () => string;
   createClient: (token: string) => Pick<OctokitClient, "paginate" | "request">;
   writeOutput: (message: string) => void;
   writeError: (message: string) => void;
@@ -39,25 +51,73 @@ export const runDiscoveryCli = async (
   }
 
   try {
+    const state = await dependencies.stateStore.load().catch(() => {
+      throw new StateStorageError();
+    });
+    const now = dependencies.now ?? (() => new Date().toISOString());
     const client = createClient(token);
     const repositories = await listOrganizationRepositories(client);
     const publicRepositories: (OrganizationRepository & {
       project?: ProjectInformation;
       error?: { code: string; message: string };
+      skipped?: boolean;
     })[] = [];
     let projectReadCount = 0;
     let failedRepositoryCount = 0;
     let emptyRepositoryCount = 0;
+    let skippedRepositoryCount = 0;
     for (const repository of repositories) {
+      const id = String(repository.id);
+      const previous = state.repositories[id];
+      const identity = {
+        repositoryId: repository.id,
+        fullName: repository.fullName,
+        defaultBranch: repository.defaultBranch,
+      };
+      const failed = (code: string): RepositoryState => ({
+        ...identity,
+        lastSuccessfulHeadSha: previous?.lastSuccessfulHeadSha ?? null,
+        lastSuccessfulAt: previous?.lastSuccessfulAt ?? null,
+        lastResult: "failure",
+        lastErrorCode: code,
+      });
       try {
-        const project = await readProjectInformation(client, repository);
+        const head = await resolveDefaultBranchHead(client, repository);
+        if (previous && shouldSkip(previous, head)) {
+          state.repositories[id] = {
+            ...previous,
+            ...identity,
+            lastResult: "success",
+            lastErrorCode: null,
+          };
+          skippedRepositoryCount++;
+          if (repository.visibility === "public")
+            publicRepositories.push({ ...repository, skipped: true });
+          continue;
+        }
+        const project = await readProjectInformation(client, repository, head);
         projectReadCount++;
-        if (project.state === "empty") emptyRepositoryCount++;
+        if (project.state === "empty") {
+          emptyRepositoryCount++;
+          state.repositories[id] = failed("EMPTY_REPOSITORY");
+        } else if (project.skippedFiles.length > 0) {
+          failedRepositoryCount++;
+          state.repositories[id] = failed("CONTENT_INCOMPLETE");
+        } else {
+          state.repositories[id] = {
+            ...identity,
+            lastSuccessfulHeadSha: head,
+            lastSuccessfulAt: now(),
+            lastResult: "success",
+            lastErrorCode: null,
+          };
+        }
         if (repository.visibility === "public")
           publicRepositories.push({ ...repository, project });
       } catch (error) {
         failedRepositoryCount++;
         const safeError = toSafeDiscoveryError(error);
+        state.repositories[id] = failed(safeError.code);
         if (repository.visibility === "public")
           publicRepositories.push({
             ...repository,
@@ -65,6 +125,9 @@ export const runDiscoveryCli = async (
           });
       }
     }
+    await dependencies.stateStore.save(state).catch(() => {
+      throw new StateStorageError();
+    });
     writeOutput(
       JSON.stringify(
         {
@@ -73,6 +136,7 @@ export const runDiscoveryCli = async (
           projectReadCount,
           failedRepositoryCount,
           emptyRepositoryCount,
+          skippedRepositoryCount,
           publicRepositories,
           restrictedRepositoryCount:
             repositories.length - publicRepositories.length,
@@ -84,7 +148,8 @@ export const runDiscoveryCli = async (
     return failedRepositoryCount > 0 ? 1 : 0;
   } catch (error) {
     const safeError =
-      error instanceof GitHubDiscoveryError
+      error instanceof GitHubDiscoveryError ||
+      error instanceof StateStorageError
         ? error
         : new GitHubDiscoveryError("REQUEST_FAILED");
 
@@ -112,12 +177,39 @@ const isDirectExecution = process.argv[1]
   : false;
 
 if (isDirectExecution) {
-  const exitCode = await runDiscoveryCli({
-    token: process.env.HUB_GITHUB_TOKEN,
-    createClient: (token) => new Octokit({ auth: token, log: silentLogger }),
-    writeOutput: (message) => console.log(message),
-    writeError: (message) => console.error(message),
-  });
+  const stateToken = process.env.HUB_STATE_TOKEN;
+  const stateRepository = process.env.HUB_STATE_REPOSITORY;
+  if (!stateToken || !stateRepository) {
+    console.error(
+      JSON.stringify({
+        error: {
+          code: "MISSING_STATE_CONFIGURATION",
+          message: "Hub state token and repository are required",
+        },
+      }),
+    );
+    process.exitCode = 1;
+  } else {
+    try {
+      const exitCode = await runDiscoveryCli({
+        token: process.env.HUB_GITHUB_TOKEN,
+        stateStore: createGitHubStateStore(
+          new Octokit({ auth: stateToken, log: silentLogger }),
+          stateRepository,
+        ),
+        createClient: (token) =>
+          new Octokit({ auth: token, log: silentLogger }),
+        writeOutput: (message) => console.log(message),
+        writeError: (message) => console.error(message),
+      });
 
-  process.exitCode = exitCode;
+      process.exitCode = exitCode;
+    } catch {
+      const error = new StateStorageError();
+      console.error(
+        JSON.stringify({ error: { code: error.code, message: error.message } }),
+      );
+      process.exitCode = 1;
+    }
+  }
 }
