@@ -76,7 +76,7 @@ API 반영은 기존 README·manifest 수집 체크포인트와 분리합니다.
 Hub 저장소 Actions에 다음을 설정합니다.
 
 - Variable `HUB_PROJECT_SYNC_ENABLED=true`
-- Variable `PORTFOLIO_API_URL`: 대상 API의 HTTPS 루트 URL입니다. 현재 Cloud Run 주소는 `https://portfolio-api-5g5unbleiq-an.a.run.app`입니다. 사용자명·비밀번호·query·fragment·하위 경로가 있는 주소는 거부합니다.
+- Variable `PORTFOLIO_API_URL`: 대상 API의 HTTPS 루트 URL입니다. 정식 API 주소는 `https://api.ycseng.com`입니다. 사용자명·비밀번호·query·fragment·하위 경로가 있는 주소는 거부합니다.
 - Variable `PORTFOLIO_SERVICE_CLIENT_ID`: portfolio-api의 `SERVICE_OAUTH_CLIENT_ID`와 같은 값입니다.
 - Secret `PORTFOLIO_SERVICE_CLIENT_SECRET`: portfolio-api의 `SERVICE_OAUTH_CLIENT_SECRET`과 같은 값입니다.
 
