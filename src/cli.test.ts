@@ -2,6 +2,8 @@ import { emptyState, type SyncState } from "./sync/state.js";
 import { Octokit } from "@octokit/rest";
 import { describe, expect, it, vi } from "vitest";
 
+import { createPortfolioApiClient } from "./portfolio-api/client.js";
+import { parseState } from "./sync/state.js";
 import { runDiscoveryCli } from "./cli.js";
 
 const withEmptyProjectFiles =
@@ -659,4 +661,396 @@ describe("runDiscoveryCli", () => {
     expect(writeError.mock.calls[0][0]).not.toContain(token);
     expect(writeError.mock.calls[0][0]).not.toContain("response-secret-value");
   });
+});
+
+it("동일 SHA라도 지침을 확인하고 온보딩 실패는 수집 체크포인트와 분리하며 비공개 정보는 출력하지 않는다", async () => {
+  const records = ["public-fixture", "private-fixture"].map((name, index) => ({
+    repositoryId: index + 1,
+    fullName: `side-projects-labs/${name}`,
+    defaultBranch: "main",
+    lastSuccessfulHeadSha: "a".repeat(40),
+    lastSuccessfulAt: "2026-11-11T00:00:00Z",
+    lastResult: "success" as const,
+    lastErrorCode: null,
+  }));
+  const store = memoryStore({
+    schemaVersion: 1,
+    repositories: Object.fromEntries(
+      records.map((record) => [String(record.repositoryId), record]),
+    ),
+  });
+  const json = (data: unknown, status = 200) =>
+    new Response(JSON.stringify(data), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+  const read = vi.fn<typeof fetch>(async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/repos"))
+      return json(
+        records.map((record, index) => ({
+          id: record.repositoryId,
+          name: record.fullName.split("/")[1],
+          full_name: record.fullName,
+          html_url: `https://github.com/${record.fullName}`,
+          default_branch: "main",
+          visibility: index === 0 ? "public" : "private",
+          archived: false,
+          fork: false,
+          pushed_at: null,
+        })),
+      );
+    if (url.pathname.includes("/commits/"))
+      return json({ sha: "a".repeat(40), tree: { sha: "base-tree" } });
+    if (url.pathname.endsWith("/AGENTS.md"))
+      return json({ message: "Not Found" }, 404);
+    if (url.pathname.endsWith("/git/trees/base-tree"))
+      return json({ truncated: false, tree: [] });
+    throw new Error("수집 본문은 읽지 않습니다");
+  });
+  const writes: string[] = [];
+  const write = vi.fn<typeof fetch>(async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (path.includes("private-fixture"))
+      return json({ message: "private-fixture-token-error" }, 403);
+    if (init?.method === "POST") writes.push(path);
+    if (path.includes("/git/ref/")) return json({ message: "Not Found" }, 404);
+    if (path.endsWith("/pulls") && init?.method !== "POST") return json([]);
+    return json({ sha: "result-sha", number: 1 });
+  });
+  const log = { debug() {}, info() {}, warn() {}, error() {} };
+  const output = vi.fn();
+  const errors = vi.fn();
+  const deps = {
+    token: "read-token",
+    stateStore: store,
+    createClient: () => new Octokit({ request: { fetch: read }, log }),
+    onboardingClient: new Octokit({ request: { fetch: write }, log }),
+    writeOutput: output,
+    writeError: errors,
+  };
+  expect(await runDiscoveryCli(deps)).toBe(1);
+  expect(JSON.parse(output.mock.calls[0][0])).toMatchObject({
+    skippedRepositoryCount: 2,
+    failedRepositoryCount: 0,
+    onboarding: { created: 1, failed: 1 },
+  });
+  expect((await store.load()).repositories).toEqual(
+    Object.fromEntries(
+      records.map((record) => [String(record.repositoryId), record]),
+    ),
+  );
+  expect(writes.filter((path) => path.endsWith("/pulls"))).toHaveLength(1);
+  expect(JSON.stringify([output.mock.calls, errors.mock.calls])).not.toMatch(
+    /private-fixture|token-error|read-token/,
+  );
+});
+
+it("온보딩을 활성화했는데 쓰기용 인증이 없으면 조회나 수집을 시작하지 않는다", async () => {
+  const createClient = vi.fn();
+  const errors = vi.fn();
+  const deps = {
+    token: "read-token",
+    requireOnboarding: true,
+    stateStore: memoryStore(),
+    createClient,
+    writeOutput: vi.fn(),
+    writeError: errors,
+  };
+  expect(await runDiscoveryCli(deps)).toBe(1);
+  expect(createClient).not.toHaveBeenCalled();
+  expect(JSON.parse(errors.mock.calls[0][0]).error.code).toBe(
+    "MISSING_ONBOARDING_TOKEN",
+  );
+});
+
+it("빈 저장소는 온보딩 쓰기를 건너뛰고 기존 빈 저장소 재확인 정책을 유지한다", async () => {
+  const json = (data: unknown, status = 200) =>
+    new Response(JSON.stringify(data), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+  const fetchMock = vi.fn<typeof fetch>(async (input) => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith("/repos"))
+      return json([
+        {
+          id: 1,
+          name: "empty",
+          full_name: "side-projects-labs/empty",
+          html_url: "https://github.com/side-projects-labs/empty",
+          default_branch: "main",
+          visibility: "private",
+          archived: false,
+          fork: false,
+          pushed_at: null,
+        },
+      ]);
+    if (path.includes("/commits/"))
+      return json({ message: "Git Repository is empty" }, 409);
+    throw new Error("빈 저장소 파일을 읽으면 안 됩니다");
+  });
+  const write = vi.fn<typeof fetch>(async () =>
+    json({ message: "unexpected-write" }, 403),
+  );
+  const log = { debug() {}, info() {}, warn() {}, error() {} };
+  const output = vi.fn();
+  expect(
+    await runDiscoveryCli({
+      token: "fake",
+      stateStore: memoryStore(),
+      createClient: () => new Octokit({ request: { fetch: fetchMock }, log }),
+      onboardingClient: new Octokit({ request: { fetch: write }, log }),
+      writeOutput: output,
+      writeError: vi.fn(),
+    }),
+  ).toBe(0);
+  expect(write).not.toHaveBeenCalled();
+  expect(JSON.parse(output.mock.calls[0][0])).toMatchObject({
+    emptyRepositoryCount: 1,
+    onboarding: { skipped: 1, failed: 0 },
+  });
+});
+
+it("수집 SHA가 같아도 미반영 문서를 API에 전송하고 실패는 다음 실행에 재시도하며 공개 로그에 본문을 남기지 않는다", async () => {
+  const head = "a".repeat(40);
+  const records = ["private-publish", "public-publish"].map((name, index) => ({
+    repositoryId: index + 1,
+    fullName: `side-projects-labs/${name}`,
+    defaultBranch: "main",
+    lastSuccessfulHeadSha: head,
+    lastSuccessfulAt: "2026-11-11T00:00:00Z",
+    lastResult: "success" as const,
+    lastErrorCode: null,
+  }));
+  const store = memoryStore({
+    schemaVersion: 1,
+    repositories: Object.fromEntries(
+      records.map((r) => [String(r.repositoryId), r]),
+    ),
+  });
+  const json = (body: unknown) =>
+    new Response(JSON.stringify(body), {
+      headers: { "content-type": "application/json" },
+    });
+  const fetchMock = vi.fn<typeof fetch>(async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/repos"))
+      return json(
+        records.map((r, index) => ({
+          id: r.repositoryId,
+          name: r.fullName.split("/")[1],
+          full_name: r.fullName,
+          html_url: `https://github.com/${r.fullName}`,
+          default_branch: "main",
+          visibility: index === 0 ? "private" : "public",
+          archived: false,
+          fork: false,
+          pushed_at: null,
+        })),
+      );
+    if (url.pathname.includes("/commits/")) return json({ sha: head });
+    expect(url.pathname.endsWith("/PROJECT.MD")).toBe(true);
+    expect(url.searchParams.get("ref")).toBe(head);
+    const doc =
+      '```json\n{"schemaVersion":1,"slug":"fixture","title":"제목","description":"설명","stacks":[]}\n```\n\n문서 원문 비밀값이 아닌 공개용 소개';
+    return json({
+      type: "file",
+      encoding: "base64",
+      size: Buffer.byteLength(doc),
+      sha: "blob",
+      content: Buffer.from(
+        doc.replace(
+          '"slug":"fixture"',
+          `"slug":"${url.pathname.includes("private-publish") ? "private-fixture" : "public-fixture"}"`,
+        ),
+      ).toString("base64"),
+    });
+  });
+  const upsert = vi.fn(async (payload: { slug: string }) => ({
+    operation: "unchanged" as const,
+    projectId: 7,
+    slug: payload.slug,
+  }));
+  upsert.mockRejectedValueOnce(new Error("secret-api-error"));
+  const log = { debug() {}, info() {}, warn() {}, error() {} };
+  const output = vi.fn();
+  const deps = {
+    token: "fake",
+    stateStore: store,
+    projectPublisher: { targetHash: "b".repeat(64), upsert },
+    createClient: () => new Octokit({ request: { fetch: fetchMock }, log }),
+    writeOutput: output,
+    writeError: vi.fn(),
+  };
+  expect(await runDiscoveryCli(deps)).toBe(1);
+  expect(JSON.parse(output.mock.calls[0][0])).toMatchObject({
+    failedRepositoryCount: 0,
+    projectSync: { success: 1, failure: 1 },
+  });
+  expect(await runDiscoveryCli(deps)).toBe(0);
+  expect(upsert).toHaveBeenCalledTimes(3);
+  const state = await store.load();
+  expect(state.applications?.["1"].lastSuccessfulHeadSha).toBe(head);
+  expect(state.applications?.["2"].lastSuccessfulHeadSha).toBe(head);
+  expect(JSON.stringify([state, output.mock.calls])).not.toMatch(
+    /문서 원문|secret-api-error|access_token/,
+  );
+  expect(JSON.stringify(output.mock.calls)).not.toContain("private-publish");
+});
+
+it("서로 다른 저장소가 같은 slug를 제공하면 두 번째 저장소가 첫 프로젝트를 덮어쓰지 않는다", async () => {
+  const json = (data: unknown) =>
+    new Response(JSON.stringify(data), {
+      headers: { "content-type": "application/json" },
+    });
+  const document =
+    '```json\n{"schemaVersion":1,"slug":"duplicate","title":"제목","description":"설명","stacks":[]}\n```\n\n본문';
+  const read = vi.fn<typeof fetch>(async (input) => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith("/repos"))
+      return json(
+        [1, 2].map((id) => ({
+          id,
+          name: `fixture-${id}`,
+          full_name: `side-projects-labs/fixture-${id}`,
+          html_url: `https://github.com/side-projects-labs/fixture-${id}`,
+          default_branch: "main",
+          visibility: "private",
+          archived: false,
+          fork: false,
+          pushed_at: null,
+        })),
+      );
+    if (path.includes("/commits/")) return json({ sha: "a".repeat(40) });
+    if (path.endsWith("/PROJECT.MD"))
+      return json({
+        type: "file",
+        encoding: "base64",
+        size: Buffer.byteLength(document),
+        sha: "blob",
+        content: Buffer.from(document).toString("base64"),
+      });
+    return json([]);
+  });
+  const log = { debug() {}, info() {}, warn() {}, error() {} };
+  const upsert = vi.fn(async () => ({
+    operation: "created" as const,
+    projectId: 1,
+    slug: "duplicate",
+  }));
+  const store = memoryStore();
+  expect(
+    await runDiscoveryCli({
+      token: "fake",
+      stateStore: store,
+      projectPublisher: { targetHash: "b".repeat(64), upsert },
+      createClient: () => new Octokit({ request: { fetch: read }, log }),
+      writeOutput: vi.fn(),
+      writeError: vi.fn(),
+    }),
+  ).toBe(1);
+  expect(upsert).toHaveBeenCalledTimes(1);
+  expect((await store.load()).applications?.["2"].lastErrorCode).toBe(
+    "PORTFOLIO_API_INVALID_INPUT",
+  );
+});
+
+it("실제 API 클라이언트와 CLI를 연결해 이미지 없는 문서를 전송하고 상태 저장 실패 뒤에도 재반영한다", async () => {
+  const json = (data: unknown) =>
+    new Response(JSON.stringify(data), {
+      headers: { "content-type": "application/json" },
+    });
+  const doc =
+    '```json\n{"schemaVersion":1,"slug":"integration","title":"제목","description":"설명","stacks":["TypeScript"]}\n```\n\n프로젝트 원문';
+  const apiFetch = vi.fn<typeof fetch>(async (input, init) => {
+    if (String(input).endsWith("/auth/token"))
+      return json({
+        access_token: "fixture-access-token",
+        token_type: "Bearer",
+        expires_in: 900,
+        scope: "project:write",
+      });
+    expect(String(input)).toBe("https://api.invalid/service/project");
+    expect(new Headers(init?.headers).get("Authorization")).toBe(
+      "Bearer fixture-access-token",
+    );
+    expect(JSON.parse(String(init?.body))).toEqual({
+      slug: "integration",
+      title: "제목",
+      description: "설명",
+      image: "",
+      stacks: '["TypeScript"]',
+      content: "프로젝트 원문",
+      linkDemo: null,
+      linkGithub: null,
+    });
+    return json({
+      operation: "unchanged",
+      project: { id: 7, slug: "integration" },
+    });
+  });
+  const read = vi.fn<typeof fetch>(async (input) => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith("/repos"))
+      return json([
+        {
+          id: 1,
+          name: "private-integration",
+          full_name: "side-projects-labs/private-integration",
+          html_url: "https://github.com/side-projects-labs/private-integration",
+          default_branch: "main",
+          visibility: "private",
+          archived: false,
+          fork: false,
+          pushed_at: null,
+        },
+      ]);
+    if (path.includes("/commits/")) return json({ sha: "a".repeat(40) });
+    if (path.endsWith("/PROJECT.MD"))
+      return json({
+        type: "file",
+        encoding: "base64",
+        sha: "blob",
+        size: Buffer.byteLength(doc),
+        content: Buffer.from(doc).toString("base64"),
+      });
+    return json([]);
+  });
+  const store = memoryStore();
+  store.save.mockRejectedValueOnce(new Error("private-storage-error"));
+  const output = vi.fn();
+  const errors = vi.fn();
+  const log = { debug() {}, info() {}, warn() {}, error() {} };
+  const deps = {
+    token: "read-token",
+    stateStore: store,
+    projectPublisher: createPortfolioApiClient({
+      baseUrl: "https://api.invalid",
+      clientId: "fixture-client",
+      clientSecret: "fixture-secret",
+      fetch: apiFetch,
+    }),
+    createClient: () => new Octokit({ request: { fetch: read }, log }),
+    writeOutput: output,
+    writeError: errors,
+  };
+  expect(await runDiscoveryCli(deps)).toBe(1);
+  expect(output).not.toHaveBeenCalled();
+  expect(await runDiscoveryCli(deps)).toBe(0);
+  expect(
+    apiFetch.mock.calls.filter(([url]) =>
+      String(url).endsWith("/service/project"),
+    ),
+  ).toHaveLength(2);
+  expect(
+    parseState(JSON.stringify(await store.load())).applications?.["1"],
+  ).toMatchObject({
+    slug: "integration",
+    lastSuccessfulHeadSha: "a".repeat(40),
+    lastResult: "success",
+  });
+  expect(JSON.stringify([output.mock.calls, errors.mock.calls])).not.toMatch(
+    /프로젝트 원문|private-integration|fixture-access-token|fixture-secret|private-storage-error/,
+  );
 });

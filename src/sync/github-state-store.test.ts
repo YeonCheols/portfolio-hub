@@ -290,3 +290,56 @@ describe("dated failure persistence", () => {
     ).toBe(true);
   });
 });
+
+it("수집 상태가 같아도 API 반영 체크포인트를 원자적으로 저장하고 같은 상태 재저장은 생략한다", async () => {
+  const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+    const path = decodeURIComponent(new URL(String(input)).pathname);
+    if (path.includes("/git/ref/")) return json({ object: { sha: "parent" } });
+    if (path.endsWith("/repositories.json"))
+      return json({
+        type: "file",
+        encoding: "base64",
+        content: Buffer.from(JSON.stringify(state)).toString("base64"),
+      });
+    if (path.includes("/git/commits/"))
+      return json({ tree: { sha: "base-tree" } });
+    if (path.endsWith("/trees")) return json({ sha: "tree" });
+    if (path.endsWith("/commits")) return json({ sha: "next" });
+    if (init?.method === "PATCH") return json({ object: { sha: "next" } });
+    throw new Error("Unexpected request");
+  });
+  const store = createGitHubStateStore(
+    client(fetchMock),
+    "YeonCheols/portfolio-hub",
+  );
+  const loaded = await store.load();
+  loaded.applications = {
+    "1": {
+      repositoryId: 1,
+      slug: "fixture",
+      targetHash: "b".repeat(64),
+      lastSuccessfulHeadSha: "a".repeat(40),
+      lastSuccessfulAt: "2026-11-12T00:00:00Z",
+      payloadHash: "c".repeat(64),
+      lastResult: "success",
+      lastErrorCode: null,
+    },
+  };
+  await store.save(loaded);
+  const treeCall = fetchMock.mock.calls.find(([url]) =>
+    String(url).endsWith("/trees"),
+  )!;
+  const tree = JSON.parse(String(treeCall[1]?.body));
+  expect(tree.base_tree).toBe("base-tree");
+  expect(JSON.parse(tree.tree[0].content)).toEqual(loaded);
+  expect(
+    fetchMock.mock.calls.some(
+      ([, init]) =>
+        init?.method === "PATCH" &&
+        JSON.parse(String(init.body)).force === false,
+    ),
+  ).toBe(true);
+  const before = fetchMock.mock.calls.length;
+  await store.save(loaded);
+  expect(fetchMock).toHaveBeenCalledTimes(before);
+});

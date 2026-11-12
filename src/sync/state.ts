@@ -1,3 +1,13 @@
+export type ApplicationState = {
+  repositoryId: number;
+  slug: string | null;
+  targetHash: string;
+  lastSuccessfulHeadSha: string | null;
+  lastSuccessfulAt: string | null;
+  payloadHash: string | null;
+  lastResult: "success" | "failure" | "pending";
+  lastErrorCode: string | null;
+};
 export type RepositoryState = {
   repositoryId: number;
   fullName: string;
@@ -11,6 +21,7 @@ export type RepositoryState = {
 export type SyncState = {
   schemaVersion: 1;
   repositories: Record<string, RepositoryState>;
+  applications?: Record<string, ApplicationState>;
 };
 export type FailureRecord = {
   repositoryId: number;
@@ -105,7 +116,10 @@ export const parseState = (text: string): SyncState => {
     if (
       !isObject(value) ||
       value.schemaVersion !== 1 ||
-      Object.keys(value).length !== 2 ||
+      Object.keys(value).some(
+        (key) =>
+          !["schemaVersion", "repositories", "applications"].includes(key),
+      ) ||
       !isObject(value.repositories)
     )
       throw new StateStorageError();
@@ -115,7 +129,84 @@ export const parseState = (text: string): SyncState => {
         throw new StateStorageError();
       repositories[id] = record;
     }
-    return { schemaVersion: 1, repositories };
+    const applications: Record<string, ApplicationState> = {};
+    if (Object.hasOwn(value, "applications")) {
+      if (!isObject(value.applications)) throw new StateStorageError();
+      const applicationErrors = new Set([
+        "REQUEST_FAILED",
+        "PROJECT_DOCUMENT_MISSING",
+        "PROJECT_DOCUMENT_UNREADABLE",
+        "PROJECT_DOCUMENT_TOO_LARGE",
+        "PROJECT_DOCUMENT_INVALID",
+        "PORTFOLIO_API_AUTH_FAILED",
+        "PORTFOLIO_API_REQUEST_FAILED",
+        "PORTFOLIO_API_INVALID_RESPONSE",
+        "PORTFOLIO_API_INVALID_INPUT",
+        "PORTFOLIO_API_CONFIGURATION_INVALID",
+      ]);
+      const nullableSha = (input: unknown) =>
+        input === null ||
+        (typeof input === "string" &&
+          /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(input));
+      for (const [id, item] of Object.entries(value.applications)) {
+        const fields = [
+          "repositoryId",
+          "slug",
+          "targetHash",
+          "lastSuccessfulHeadSha",
+          "lastSuccessfulAt",
+          "payloadHash",
+          "lastResult",
+          "lastErrorCode",
+        ];
+        if (
+          !isObject(item) ||
+          Object.keys(item).length !== fields.length ||
+          !fields.every((key) => Object.hasOwn(item, key)) ||
+          !Number.isSafeInteger(item.repositoryId) ||
+          typeof item.repositoryId !== "number" ||
+          item.repositoryId <= 0 ||
+          id !== String(item.repositoryId) ||
+          typeof item.targetHash !== "string" ||
+          !/^[a-f0-9]{64}$/.test(item.targetHash) ||
+          !nullableSha(item.lastSuccessfulHeadSha) ||
+          (item.lastSuccessfulAt !== null &&
+            (typeof item.lastSuccessfulAt !== "string" ||
+              !Number.isFinite(Date.parse(item.lastSuccessfulAt)))) ||
+          (item.slug !== null &&
+            (typeof item.slug !== "string" ||
+              !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$/.test(item.slug))) ||
+          (item.payloadHash !== null &&
+            (typeof item.payloadHash !== "string" ||
+              !/^[a-f0-9]{64}$/.test(item.payloadHash)))
+        )
+          throw new StateStorageError();
+        if (
+          (item.lastSuccessfulHeadSha === null) !==
+            (item.lastSuccessfulAt === null) ||
+          (item.lastSuccessfulHeadSha === null) !==
+            (item.payloadHash === null) ||
+          (item.lastSuccessfulHeadSha === null) !== (item.slug === null)
+        )
+          throw new StateStorageError();
+        if (
+          item.lastResult === "success"
+            ? item.lastSuccessfulHeadSha === null || item.lastErrorCode !== null
+            : !["failure", "pending"].includes(String(item.lastResult)) ||
+              typeof item.lastErrorCode !== "string" ||
+              !applicationErrors.has(item.lastErrorCode) ||
+              (item.lastResult === "pending" &&
+                item.lastErrorCode !== "PROJECT_DOCUMENT_MISSING")
+        )
+          throw new StateStorageError();
+        applications[id] = item as ApplicationState;
+      }
+    }
+    return {
+      schemaVersion: 1,
+      repositories,
+      ...(Object.hasOwn(value, "applications") ? { applications } : {}),
+    };
   } catch {
     throw new StateStorageError();
   }
