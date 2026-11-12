@@ -80,3 +80,39 @@ describe("failure history", () => {
     ).toHaveLength(1);
   });
 });
+
+it("API 반영 체크포인트를 수집 상태와 분리해 검증하고 본문·토큰·알 수 없는 코드를 거부한다", () => {
+  const application = {
+    repositoryId: 1,
+    slug: "fixture",
+    targetHash: "b".repeat(64),
+    lastSuccessfulHeadSha: "a".repeat(40),
+    lastSuccessfulAt: "2026-11-12T00:00:00Z",
+    payloadHash: "c".repeat(64),
+    lastResult: "success",
+    lastErrorCode: null,
+  };
+  const state = {
+    schemaVersion: 1,
+    repositories: {},
+    applications: { "1": application },
+  };
+  expect(parseState(JSON.stringify(state))).toEqual(state);
+  for (const bad of [
+    { ...application, content: "private body" },
+    { ...application, token: "secret" },
+    {
+      ...application,
+      lastResult: "failure",
+      lastErrorCode: "private raw error",
+    },
+    { ...application, payloadHash: null },
+  ]) {
+    expect(() =>
+      parseState(JSON.stringify({ ...state, applications: { "1": bad } })),
+    ).toThrow();
+  }
+  expect(
+    parseState(JSON.stringify({ schemaVersion: 1, repositories: {} })),
+  ).toEqual({ schemaVersion: 1, repositories: {} });
+});

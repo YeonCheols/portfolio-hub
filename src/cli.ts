@@ -1,3 +1,11 @@
+import {
+  applyProject,
+  type ProjectPublisher,
+} from "./portfolio-api/application.js";
+import {
+  createPortfolioApiClient,
+  PortfolioApiError,
+} from "./portfolio-api/client.js";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -29,6 +37,8 @@ import { createGitHubStateStore } from "./sync/github-state-store.js";
 export type DiscoveryCliDependencies = {
   token: string | undefined;
   stateStore: StateStore;
+  requireProjectSync?: boolean;
+  projectPublisher?: ProjectPublisher;
   requireOnboarding?: boolean;
   onboardingClient?: Pick<OctokitClient, "request" | "paginate">;
   now?: () => string;
@@ -40,7 +50,8 @@ export type DiscoveryCliDependencies = {
 export const runDiscoveryCli = async (
   dependencies: DiscoveryCliDependencies,
 ): Promise<number> => {
-  const { token, createClient, writeOutput, writeError } = dependencies;
+  const { token, createClient, writeOutput, writeError, projectPublisher } =
+    dependencies;
 
   if (!token?.trim()) {
     writeError(
@@ -60,6 +71,18 @@ export const runDiscoveryCli = async (
         error: {
           code: "MISSING_ONBOARDING_TOKEN",
           message: "Onboarding writer token is required when enabled",
+        },
+      }),
+    );
+    return 1;
+  }
+
+  if (dependencies.requireProjectSync && !projectPublisher) {
+    writeError(
+      JSON.stringify({
+        error: {
+          code: "PORTFOLIO_API_CONFIGURATION_INVALID",
+          message: "Portfolio API operation failed",
         },
       }),
     );
@@ -87,6 +110,25 @@ export const runDiscoveryCli = async (
       skipped: 0,
       failed: 0,
     };
+    const slugOwners = new Map<string, string>();
+    if (projectPublisher) {
+      for (const [id, application] of Object.entries(
+        state.applications ?? {},
+      )) {
+        if (
+          application.targetHash !== projectPublisher.targetHash ||
+          application.slug === null
+        )
+          continue;
+        if (
+          slugOwners.has(application.slug) &&
+          slugOwners.get(application.slug) !== id
+        )
+          throw new StateStorageError();
+        slugOwners.set(application.slug, id);
+      }
+    }
+    const projectSync = { success: 0, failure: 0, pending: 0, skipped: 0 };
     let projectReadCount = 0;
     let failedRepositoryCount = 0;
     let emptyRepositoryCount = 0;
@@ -126,6 +168,30 @@ export const runDiscoveryCli = async (
           }
         } else if (dependencies.onboardingClient) {
           onboarding.skipped++;
+        }
+        if (projectPublisher) {
+          const application = await applyProject(
+            client,
+            repository,
+            head,
+            state.applications?.[id],
+            {
+              targetHash: projectPublisher.targetHash,
+              upsert: async (payload) => {
+                const owner = slugOwners.get(payload.slug);
+                if (owner !== undefined && owner !== id)
+                  throw new PortfolioApiError("PORTFOLIO_API_INVALID_INPUT");
+                slugOwners.set(payload.slug, id);
+                return projectPublisher.upsert(payload);
+              },
+            },
+            now,
+          );
+          projectSync[application.result]++;
+          if (application.state) {
+            state.applications ??= {};
+            state.applications[id] = application.state;
+          }
         }
         if (previous && shouldSkip(previous, head)) {
           state.repositories[id] = {
@@ -180,6 +246,7 @@ export const runDiscoveryCli = async (
       JSON.stringify(
         {
           organization: ORGANIZATION,
+          ...(projectPublisher ? { projectSync } : {}),
           ...(dependencies.onboardingClient ? { onboarding } : {}),
           repositoryCount: repositories.length,
           projectReadCount,
@@ -194,7 +261,11 @@ export const runDiscoveryCli = async (
         2,
       ),
     );
-    return failedRepositoryCount > 0 || onboarding.failed > 0 ? 1 : 0;
+    return failedRepositoryCount > 0 ||
+      onboarding.failed > 0 ||
+      projectSync.failure > 0
+      ? 1
+      : 0;
   } catch (error) {
     const safeError =
       error instanceof GitHubDiscoveryError ||
@@ -242,6 +313,15 @@ if (isDirectExecution) {
     try {
       const exitCode = await runDiscoveryCli({
         token: process.env.HUB_GITHUB_TOKEN,
+        requireProjectSync: process.env.HUB_PROJECT_SYNC_ENABLED === "true",
+        projectPublisher:
+          process.env.HUB_PROJECT_SYNC_ENABLED === "true"
+            ? createPortfolioApiClient({
+                baseUrl: process.env.PORTFOLIO_API_URL ?? "",
+                clientId: process.env.PORTFOLIO_SERVICE_CLIENT_ID ?? "",
+                clientSecret: process.env.PORTFOLIO_SERVICE_CLIENT_SECRET ?? "",
+              })
+            : undefined,
         requireOnboarding: process.env.HUB_ONBOARDING_ENABLED === "true",
         onboardingClient:
           process.env.HUB_ONBOARDING_ENABLED === "true" &&
@@ -262,8 +342,9 @@ if (isDirectExecution) {
       });
 
       process.exitCode = exitCode;
-    } catch {
-      const error = new StateStorageError();
+    } catch (cause) {
+      const error =
+        cause instanceof PortfolioApiError ? cause : new StateStorageError();
       console.error(
         JSON.stringify({ error: { code: error.code, message: error.message } }),
       );

@@ -296,7 +296,7 @@ it("열린 PR의 다음 페이지에 온보딩 PR이 있어도 중복 생성하�
   const pages: string[] = [];
   const writer = new Octokit({
     request: {
-      fetch: async (input) => {
+      fetch: async (input: Parameters<typeof fetch>[0]) => {
         const url = new URL(String(input));
         pages.push(url.searchParams.get("page") ?? "1");
         const second = url.searchParams.get("page") === "2";

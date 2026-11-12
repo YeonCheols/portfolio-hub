@@ -42,7 +42,7 @@
 6. 커밋 없는 저장소는 `EMPTY_REPOSITORY`로 기록하고 빈 저장소 개수로 출력합니다. 성공 SHA는 기록하지 않아 다음 실행에서 다시 확인합니다. 빈 저장소 자체는 전체 작업을 실패시키지 않습니다.
 7. 모든 저장소 처리 뒤 바뀐 상태만 저장합니다. 일부 수집 실패도 다른 저장소의 성공 및 안전한 실패 기록은 보관한 뒤 종료 코드 1을 반환합니다. 상태 저장 실패도 종료 코드 1로 처리합니다.
 
-현재 성공 체크포인트는 수집 완료만 의미합니다. AI 생성·portfolio-api 반영·승인·발행은 구현되어 있지 않으므로 완료로 간주하지 않습니다. 후속 단계가 추가되면 단계별 성공 SHA와 멱등성 계약을 마련하고 기존 수집 상태를 그대로 최종 반영 상태로 재사용하지 않습니다. 수집 규칙이 달라질 때 동일 HEAD를 재처리할 마이그레이션도 함께 설계합니다.
+repositories의 성공 체크포인트는 수집 완료만 의미합니다. portfolio-api 반영은 선택적 applications 맵의 별도 성공 SHA로 기록하며 수집 성공을 API 반영 성공으로 간주하지 않습니다. Hub는 AI 콘텐츠·이미지를 생성하지 않습니다. 수집 규칙이 달라질 때 동일 HEAD를 재처리할 마이그레이션도 함께 설계합니다.
 
 ## 저장과 복구
 
@@ -63,3 +63,9 @@
 ## 브랜치 보호
 
 `sync-state protection` ruleset은 `refs/heads/sync-state`에만 적용하며 삭제와 강제 푸시를 차단합니다. 자동 저장에 필요한 일반 푸시는 허용합니다. 전체 잠금이나 PR 필수 조건을 추가하면 현재 `GITHUB_TOKEN` 직접 저장 방식이 차단되므로 적용하지 않습니다.
+
+## API 반영 체크포인트
+
+기존 schemaVersion 1 JSON에 선택적 `applications` 맵을 추가합니다. 키는 GitHub 저장소 ID이며 값은 repositoryId, slug, targetHash, lastSuccessfulHeadSha, lastSuccessfulAt, payloadHash, lastResult, lastErrorCode만 허용합니다. lastResult는 success/failure/pending이며 pending은 PROJECT_DOCUMENT_MISSING일 때만 사용합니다. 본문·이미지 URL·링크·토큰·원문 오류는 저장하지 않습니다.
+
+API와 수집 상태는 같은 JSON·같은 상태 커밋으로 저장하며 기존 동시 쓰기 충돌·부트스트랩·no-op 저장·실패 이력 보존 계약을 재사용합니다. 수집 SHA가 같아도 미반영 문서는 API 반영을 재시도합니다. API 실패는 이전 성공 SHA·시각·입력 해시를 보존하고 날짜별 수집 실패 이력과 분리합니다. API는 성공했지만 상태 저장이 실패하면 다음 실행에서 같은 입력을 재전송합니다. 자세한 규격과 활성화 설정은 [프로젝트 문서 계약](project-document.md)을 따릅니다.
