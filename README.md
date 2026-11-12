@@ -77,6 +77,8 @@ Hub는 각 저장소의 PROJECT.MD·대표 이미지 유지 지침을 중앙 관
 
 각 저장소의 PROJECT.MD 첫 JSON 블록에서 제목·설명·slug·스택과 선택적인 공개 이미지 URL·링크를 읽고, 아래 마크다운을 본문으로 그대로 전송합니다. 공개 이미지 URL이 없으면 이미지 없이 등록합니다. Hub의 AI 생성·이미지 업로드는 없습니다.
 
-`HUB_PROJECT_SYNC_ENABLED=true`, `PORTFOLIO_API_URL`, `PORTFOLIO_SERVICE_CLIENT_ID` variables와 `PORTFOLIO_SERVICE_CLIENT_SECRET` secret을 설정하면 동기화 중 서비스 토큰을 발급받아 `PUT /service/project`를 호출합니다. API 반영 성공 SHA는 수집 SHA와 분리해 저장하므로 저장 실패를 다음 실행에서 재시도합니다. 문서가 없으면 반영 대기하며 기존 포트폴리오 항목을 삭제하지 않습니다. API 반영은 즉시 공개되고 관리자 편집 내용도 교체합니다.
+`HUB_PROJECT_SYNC_ENABLED=true`, `PORTFOLIO_API_URL=https://api.ycseng.com` variables를 설정하면 워크플로가 GitHub OIDC로 15분 access token을 발급받아 `PUT /service/project`를 호출합니다. 별도 서비스 ID·Secret이나 고정 서비스 토큰은 필요하지 않습니다. API는 GitHub 서명·issuer·audience·만료와 저장소 소유자 `YeonCheols`의 고정 ID(`91575756`)를 검증합니다. 같은 소유자의 모든 저장소 워크플로를 허용하는 정책이며 수집 대상 조직과는 구분합니다. API 반영 성공 SHA는 수집 SHA와 분리해 저장하므로 저장 실패를 다음 실행에서 재시도합니다. 문서가 없으면 반영 대기하며 기존 포트폴리오 항목을 삭제하지 않습니다. API 반영은 즉시 공개되고 관리자 편집 내용도 교체합니다.
 
 문서 예시·선택 이미지·초기 설정·재시도 계약은 [프로젝트 문서 계약](docs/project-document.md)을 따릅니다.
+
+토큰은 `$RUNNER_TEMP`의 권한 0600 임시 파일에만 보관합니다. 워크플로 종료 단계는 성공·실패와 관계없이 API 토큰 폐기를 시도한 뒤 파일을 삭제합니다. 강제 종료나 폐기 요청 실패 시에도 15분 만료가 적용됩니다. 토큰을 공개 `sync-state`, 캐시, artifact, 정적 설정에 저장하지 않습니다. GitHub OIDC와 API access token은 Actions 로그에서 마스킹합니다. API의 OIDC 교환·폐기 지원을 먼저 배포한 뒤 Hub 동기화를 활성화합니다.

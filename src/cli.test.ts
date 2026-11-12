@@ -1027,8 +1027,7 @@ it("실제 API 클라이언트와 CLI를 연결해 이미지 없는 문서를 �
     stateStore: store,
     projectPublisher: createPortfolioApiClient({
       baseUrl: "https://api.invalid",
-      clientId: "fixture-client",
-      clientSecret: "fixture-secret",
+      accessToken: "fixture-access-token",
       fetch: apiFetch,
     }),
     createClient: () => new Octokit({ request: { fetch: read }, log }),

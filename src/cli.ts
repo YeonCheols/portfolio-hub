@@ -6,6 +6,10 @@ import {
   createPortfolioApiClient,
   PortfolioApiError,
 } from "./portfolio-api/client.js";
+import {
+  readWorkflowAccessToken,
+  workflowTokenPath,
+} from "./portfolio-api/workflow-auth.js";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -318,8 +322,9 @@ if (isDirectExecution) {
           process.env.HUB_PROJECT_SYNC_ENABLED === "true"
             ? createPortfolioApiClient({
                 baseUrl: process.env.PORTFOLIO_API_URL ?? "",
-                clientId: process.env.PORTFOLIO_SERVICE_CLIENT_ID ?? "",
-                clientSecret: process.env.PORTFOLIO_SERVICE_CLIENT_SECRET ?? "",
+                accessToken: await readWorkflowAccessToken(
+                  workflowTokenPath(process.env),
+                ),
               })
             : undefined,
         requireOnboarding: process.env.HUB_ONBOARDING_ENABLED === "true",

@@ -12,8 +12,7 @@ const payload = {
 };
 const options = {
   baseUrl: "https://api.invalid",
-  clientId: "service:id",
-  clientSecret: "secret +값",
+  accessToken: "fixture-token",
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -21,69 +20,39 @@ const json = (body: unknown, status = 200) =>
     headers: { "content-type": "application/json" },
   });
 
-describe("portfolio-api 서비스 클라이언트", () => {
-  it("서버 자격으로 토큰을 발급받아 전체 콘텐츠를 PUT하고 유효한 토큰을 재사용한다", async () => {
-    const fetchMock = vi.fn<typeof fetch>(async (input) =>
-      String(input).endsWith("/auth/token")
-        ? json({
-            access_token: "fixture-token",
-            token_type: "Bearer",
-            expires_in: 900,
-            scope: "project:write",
-          })
-        : json({
-            operation: "created",
-            project: { id: 7, slug: payload.slug },
-          }),
+describe("portfolio-api OAuth 클라이언트", () => {
+  it("워크플로가 발급받은 access token으로 API를 호출하고 별도 자격 발급은 하지 않는다", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      json({ operation: "created", project: { id: 7, slug: payload.slug } }),
     );
     const client = createPortfolioApiClient({ ...options, fetch: fetchMock });
-    expect(await client.upsert(payload)).toEqual({
+    await expect(client.upsert(payload)).resolves.toEqual({
       operation: "created",
       projectId: 7,
       slug: payload.slug,
     });
-    await client.upsert(payload);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("https://api.invalid/auth/token");
-    expect(String(init?.body)).toBe(
-      "grant_type=client_credentials&scope=project%3Awrite",
-    );
+    expect(url).toBe("https://api.invalid/service/project");
     expect(new Headers(init?.headers).get("Authorization")).toBe(
-      `Basic ${Buffer.from("service%3Aid:secret+%2B%EA%B0%92").toString("base64")}`,
+      "Bearer fixture-token",
     );
-    expect(fetchMock.mock.calls[1][0]).toBe(
-      "https://api.invalid/service/project",
-    );
-    expect(fetchMock.mock.calls[1][1]?.method).toBe("PUT");
-    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual(
-      payload,
-    );
-    expect(
-      new Headers(fetchMock.mock.calls[1][1]?.headers).get("Authorization"),
-    ).toBe("Bearer fixture-token");
+    expect(JSON.parse(String(init?.body))).toEqual(payload);
   });
 });
 
 it("인증·저장·네트워크·잘못된 응답 오류는 원문과 토큰을 숨긴 고정 코드로 반환한다", async () => {
   for (const failure of ["auth", "save", "network", "response"] as const) {
-    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+    const fetchMock = vi.fn<typeof fetch>(async () => {
       if (failure === "network") throw new Error("private-token-raw-error");
-      if (String(input).endsWith("/auth/token"))
-        return failure === "auth"
-          ? json({ error: "private-token-raw-error" }, 401)
-          : json({
-              access_token: "fixture-token",
-              token_type: "Bearer",
-              expires_in: 900,
-              scope: "project:write",
-            });
-      return failure === "save"
-        ? json({ message: "private-token-raw-error" }, 503)
-        : json({
-            operation: "created",
-            project: { id: 7, slug: "wrong-project" },
-          });
+      if (failure === "auth")
+        return json({ error: "private-token-raw-error" }, 401);
+      if (failure === "save")
+        return json({ error: "private-token-raw-error" }, 503);
+      return json({
+        operation: "created",
+        project: { id: 7, slug: "wrong-project" },
+      });
     });
     const client = createPortfolioApiClient({ ...options, fetch: fetchMock });
     await expect(client.upsert(payload)).rejects.toMatchObject({
@@ -97,40 +66,18 @@ it("인증·저장·네트워크·잘못된 응답 오류는 원문과 토큰을
     });
   }
 });
-
-it("토큰 만료가 가까워지면 새로 발급하고 안전하지 않은 API 주소는 요청 전에 거부한다", async () => {
-  let now = 0;
-  const fetchMock = vi.fn<typeof fetch>(async (input) =>
-    String(input).endsWith("/auth/token")
-      ? json({
-          access_token: "fixture-token",
-          token_type: "Bearer",
-          expires_in: 900,
-          scope: "project:write",
-        })
-      : json({
-          operation: "unchanged",
-          project: { id: 7, slug: payload.slug },
-        }),
-  );
-  const client = createPortfolioApiClient({
-    ...options,
-    fetch: fetchMock,
-    now: () => now,
-  });
-  await client.upsert(payload);
-  now = 880000;
-  await client.upsert(payload);
-  expect(
-    fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/auth/token")),
-  ).toHaveLength(2);
+it("안전하지 않은 API 주소와 빈 토큰은 요청 전에 거부한다", () => {
   for (const baseUrl of [
     "http://api.invalid",
     "https://user:secret@api.invalid",
     "https://api.invalid/?secret=value",
   ]) {
-    expect(() =>
-      createPortfolioApiClient({ ...options, baseUrl, fetch: fetchMock }),
-    ).toThrow("Portfolio API operation failed");
+    expect(() => createPortfolioApiClient({ ...options, baseUrl })).toThrow(
+      "Portfolio API operation failed",
+    );
   }
+  for (const accessToken of ["", "token with spaces", "token\n"])
+    expect(() => createPortfolioApiClient({ ...options, accessToken })).toThrow(
+      "Portfolio API operation failed",
+    );
 });
