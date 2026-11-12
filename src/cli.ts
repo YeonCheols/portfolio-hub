@@ -8,11 +8,15 @@ import {
   GitHubDiscoveryError,
   listOrganizationRepositories,
   ORGANIZATION,
+  toSafeDiscoveryError,
 } from "./github/list-organization-repositories.js";
+import type { OrganizationRepository } from "./github/list-organization-repositories.js";
+import { readProjectInformation } from "./github/read-project-information.js";
+import type { ProjectInformation } from "./github/read-project-information.js";
 
 export type DiscoveryCliDependencies = {
   token: string | undefined;
-  createClient: (token: string) => Pick<OctokitClient, "paginate">;
+  createClient: (token: string) => Pick<OctokitClient, "paginate" | "request">;
   writeOutput: (message: string) => void;
   writeError: (message: string) => void;
 };
@@ -35,17 +39,40 @@ export const runDiscoveryCli = async (
   }
 
   try {
-    const repositories = await listOrganizationRepositories(
-      createClient(token),
-    );
-    const publicRepositories = repositories.filter(
-      (repository) => repository.visibility === "public",
-    );
+    const client = createClient(token);
+    const repositories = await listOrganizationRepositories(client);
+    const publicRepositories: (OrganizationRepository & {
+      project?: ProjectInformation;
+      error?: { code: string; message: string };
+    })[] = [];
+    let projectReadCount = 0;
+    let failedRepositoryCount = 0;
+    let emptyRepositoryCount = 0;
+    for (const repository of repositories) {
+      try {
+        const project = await readProjectInformation(client, repository);
+        projectReadCount++;
+        if (project.state === "empty") emptyRepositoryCount++;
+        if (repository.visibility === "public")
+          publicRepositories.push({ ...repository, project });
+      } catch (error) {
+        failedRepositoryCount++;
+        const safeError = toSafeDiscoveryError(error);
+        if (repository.visibility === "public")
+          publicRepositories.push({
+            ...repository,
+            error: { code: safeError.code, message: safeError.message },
+          });
+      }
+    }
     writeOutput(
       JSON.stringify(
         {
           organization: ORGANIZATION,
           repositoryCount: repositories.length,
+          projectReadCount,
+          failedRepositoryCount,
+          emptyRepositoryCount,
           publicRepositories,
           restrictedRepositoryCount:
             repositories.length - publicRepositories.length,
@@ -54,7 +81,7 @@ export const runDiscoveryCli = async (
         2,
       ),
     );
-    return 0;
+    return failedRepositoryCount > 0 ? 1 : 0;
   } catch (error) {
     const safeError =
       error instanceof GitHubDiscoveryError

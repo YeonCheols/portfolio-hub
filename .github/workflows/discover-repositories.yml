@@ -36,7 +36,7 @@ jobs:
           owner: side-projects-labs
           permission-metadata: read
           permission-contents: read
-      - name: List organization repositories
+      - name: Read default-branch project information
         run: pnpm discover
         env:
           HUB_GITHUB_TOKEN: ${{ steps.github-app-token.outputs.token }}
