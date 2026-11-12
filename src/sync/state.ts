@@ -12,9 +12,17 @@ export type SyncState = {
   schemaVersion: 1;
   repositories: Record<string, RepositoryState>;
 };
+export type FailureRecord = {
+  repositoryId: number;
+  fullName: string;
+  defaultBranch: string;
+  headSha: string | null;
+  failedAt: string;
+  code: string;
+};
 export type StateStore = {
   load: () => Promise<SyncState>;
-  save: (state: SyncState) => Promise<void>;
+  save: (state: SyncState, failures?: FailureRecord[]) => Promise<void>;
 };
 export const emptyState = (): SyncState => ({
   schemaVersion: 1,
@@ -116,3 +124,53 @@ export const shouldSkip = (
   record: RepositoryState | undefined,
   head: string | null,
 ): boolean => head !== null && record?.lastSuccessfulHeadSha === head;
+
+export const parseFailureHistory = (text: string): FailureRecord[] => {
+  try {
+    const value: unknown = JSON.parse(text);
+    if (
+      !isObject(value) ||
+      value.schemaVersion !== 1 ||
+      Object.keys(value).length !== 2 ||
+      !Array.isArray(value.failures)
+    )
+      throw new StateStorageError();
+    return value.failures.map((item: unknown) => {
+      if (
+        !isObject(item) ||
+        Object.keys(item).length !== 6 ||
+        typeof item.failedAt !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(
+          item.failedAt,
+        ) ||
+        !Number.isFinite(Date.parse(item.failedAt)) ||
+        !isRecord({
+          repositoryId: item.repositoryId,
+          fullName: item.fullName,
+          defaultBranch: item.defaultBranch,
+          lastSuccessfulHeadSha: item.headSha,
+          lastSuccessfulAt: item.headSha === null ? null : item.failedAt,
+          lastResult: "failure",
+          lastErrorCode: item.code,
+        })
+      )
+        throw new StateStorageError();
+      return {
+        repositoryId: Number(item.repositoryId),
+        fullName: String(item.fullName),
+        defaultBranch: String(item.defaultBranch),
+        headSha: item.headSha === null ? null : String(item.headSha),
+        failedAt: item.failedAt,
+        code: String(item.code),
+      };
+    });
+  } catch {
+    throw new StateStorageError();
+  }
+};
+export const failurePath = (failedAt: string): string => {
+  const day = new Date(Date.parse(failedAt) + 9 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  return `state/failures/${day}/failures.json`;
+};

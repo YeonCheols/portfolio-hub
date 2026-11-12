@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { shouldSkip, parseState, type RepositoryState } from "./state.js";
+import {
+  shouldSkip,
+  parseState,
+  parseFailureHistory,
+  failurePath,
+  type RepositoryState,
+} from "./state.js";
 
 const record: RepositoryState = {
   repositoryId: 1,
@@ -35,5 +41,42 @@ describe("sync state", () => {
     expect(shouldSkip(record, "sha-b")).toBe(false);
     expect(shouldSkip(undefined, "sha-a")).toBe(false);
     expect(shouldSkip(record, null)).toBe(false);
+  });
+});
+
+describe("failure history", () => {
+  it("실패 정보의 오류 코드와 필드를 검증하고 한국 시간 날짜로 경로를 나눈다", () => {
+    const failure = {
+      repositoryId: 1,
+      fullName: "side-projects-labs/demo",
+      defaultBranch: "master",
+      headSha: "b".repeat(40),
+      failedAt: "2026-11-12T15:00:00.000Z",
+      code: "REQUEST_FAILED",
+    };
+    const history = { schemaVersion: 1, failures: [failure] };
+    expect(parseFailureHistory(JSON.stringify(history))).toEqual([failure]);
+    expect(failurePath("2026-11-12T14:59:59.999Z")).toBe(
+      "state/failures/2026-11-12/failures.json",
+    );
+    expect(failurePath(failure.failedAt)).toBe(
+      "state/failures/2026-11-13/failures.json",
+    );
+    for (const invalid of [
+      { ...history, schemaVersion: 2 },
+      { ...history, failures: [{ ...failure, code: "secret-error-text" }] },
+      { ...history, failures: [{ ...failure, content: "private-source" }] },
+      { ...history, failures: [{ ...failure, headSha: "invalid" }] },
+      { ...history, failures: [{ ...failure, failedAt: "invalid" }] },
+    ])
+      expect(() => parseFailureHistory(JSON.stringify(invalid))).toThrow();
+    expect(
+      parseFailureHistory(
+        JSON.stringify({
+          schemaVersion: 1,
+          failures: [{ ...failure, headSha: null }],
+        }),
+      ),
+    ).toHaveLength(1);
   });
 });

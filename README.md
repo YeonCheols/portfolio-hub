@@ -60,3 +60,5 @@ pnpm lint
 pnpm typecheck
 pnpm test
 ```
+
+수집 실패 이력은 `sync-state` 브랜치의 `state/failures/YYYY-MM-DD/failures.json`에 한국 시간 날짜별로 누적하며, 복구 후에도 보존합니다. 저장 항목과 브랜치 보호 정책은 [상태 저장 가이드](docs/sync-state.md)를 따릅니다.
