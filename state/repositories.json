@@ -10,5 +10,17 @@
       "lastResult": "success",
       "lastErrorCode": null
     }
+  },
+  "applications": {
+    "1454663289": {
+      "repositoryId": 1454663289,
+      "slug": null,
+      "targetHash": "699cb4d240471cc74625b6b14e0c0f2dacb28e88d28327790768349c53c34aee",
+      "lastSuccessfulHeadSha": null,
+      "lastSuccessfulAt": null,
+      "payloadHash": null,
+      "lastResult": "pending",
+      "lastErrorCode": "PROJECT_DOCUMENT_MISSING"
+    }
   }
 }
