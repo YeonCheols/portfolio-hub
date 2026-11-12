@@ -2,6 +2,12 @@ name: Discover organization repositories
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - master
+  schedule:
+    # GitHub cron uses UTC; odd UTC hours are even hours in Asia/Seoul.
+    - cron: "0 1-23/2 * * *"
 
 permissions:
   contents: read

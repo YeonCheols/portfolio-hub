@@ -31,7 +31,13 @@ App 등록 권한을 변경한 뒤에는 Organization의 설치 설정에서도 
 
 ## 실행
 
-GitHub Actions의 **Discover organization repositories** 워크플로를 수동 실행합니다. **Read default-branch project information** 단계에서 전체·성공·실패·빈 저장소 수와 공개 저장소의 `project` 정보를 확인합니다. `project`에는 기본 브랜치, 기준 커밋 SHA, 루트 구조, 파일 경로·blob SHA·본문, 생략한 파일 목록이 포함됩니다. 파일이 원래 없으면 빈 배열이며 원문 오류는 출력하지 않습니다.
+GitHub Actions의 **Discover organization repositories** 워크플로는 다음 조건으로 실행합니다.
+
+- 매일 한국 시간 00:00, 02:00부터 22:00까지 2시간마다 실행합니다. GitHub의 UTC cron 표현식은 `0 1-23/2 * * *`입니다.
+- Hub 저장소의 `master` 브랜치에 push되면 자동 실행합니다. 다른 사이드 프로젝트 저장소의 push는 예약 실행 때 반영합니다.
+- Actions 화면에서 수동 실행할 수도 있습니다.
+
+**Read default-branch project information** 단계에서 전체·성공·실패·빈 저장소 수와 공개 저장소의 `project` 정보를 확인합니다. `project`에는 기본 브랜치, 기준 커밋 SHA, 루트 구조, 파일 경로·blob SHA·본문, 생략한 파일 목록이 포함됩니다. 파일이 원래 없으면 빈 배열이며 원문 오류는 출력하지 않습니다.
 
 로컬 실행은 `HUB_GITHUB_TOKEN` 환경 변수에 읽기 전용 설치 토큰을 설정한 다음 아래 명령을 사용합니다. 토큰 값을 명령 인자나 저장소 파일에 넣지 않습니다.
 
