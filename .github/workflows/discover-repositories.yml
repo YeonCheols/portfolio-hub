@@ -42,9 +42,25 @@ jobs:
           owner: side-projects-labs
           permission-metadata: read
           permission-contents: read
+      - name: Create separate onboarding writer token
+        if: vars.HUB_ONBOARDING_ENABLED == 'true'
+        uses: actions/create-github-app-token@v3.2.0
+        id: onboarding-app-token
+        with:
+          client-id: ${{ vars.HUB_ONBOARDING_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HUB_ONBOARDING_APP_PRIVATE_KEY }}
+          owner: side-projects-labs
+          permission-metadata: read
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Report disabled repository onboarding
+        if: vars.HUB_ONBOARDING_ENABLED != 'true'
+        run: echo "Repository onboarding is disabled; configure the separate writer App to enable it."
       - name: Read default-branch project information
         run: pnpm discover
         env:
+          HUB_ONBOARDING_ENABLED: ${{ vars.HUB_ONBOARDING_ENABLED }}
+          HUB_ONBOARDING_TOKEN: ${{ steps.onboarding-app-token.outputs.token }}
           HUB_GITHUB_TOKEN: ${{ steps.github-app-token.outputs.token }}
           HUB_STATE_TOKEN: ${{ github.token }}
           HUB_STATE_REPOSITORY: ${{ github.repository }}

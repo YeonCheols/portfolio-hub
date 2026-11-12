@@ -12,6 +12,13 @@ This repository is being initialized. Read the relevant skill in .agents/skills/
 - Current collection includes root README/project manifests and root directory entries. Only allowlisted text files are fetched; no environment files, lockfiles, arbitrary source execution, or dependency installation from scanned repositories is allowed. Per-repository failures must not stop the remaining repositories.
 - Do not add portfolio-api writes, AI generation, or public publishing without the corresponding user-authorized scope.
 
+## Project document contract
+
+- Use the default branch root `PROJECT.MD` as the canonical project document. Keep its content free-form: do not impose headings, required fields, front matter, authoring tools, or generation methods. Project-specific document creation remains owned by each repository; AI can supplement the document as a supporting stage.
+- Read through `src/project-document/read-document.ts` at an already resolved HEAD SHA. Preserve source metadata and markdown without logging or persisting bodies. Do not substitute README or treat document collection as API application success. The user-authorized onboarding exception may propose AGENTS.md changes through a dedicated branch and a manually merged PR; never directly update a source default branch, PROJECT.MD, or image.
+- Follow `docs/project-document.md` for the shared maintenance guideline to propose in each repository's AGENTS.md. Maintain and update PROJECT.MD when project content changes without imposing a common content template.
+- The document reader scope stops at the markdown input contract. Service authentication and project create/update contracts belong to the separate portfolio-api task; AI execution and application checkpoints are deferred.
+
 ## Sync state guide
 
 - Persist synchronization metadata in this Hub repository, on the dedicated `sync-state` branch at `state/repositories.json`. Do not add a separate database, catalog repository, Supabase store, or encryption layer for this scope.
@@ -38,3 +45,12 @@ This repository is being initialized. Read the relevant skill in .agents/skills/
 - issue: create and validate a GitHub issue.
 
 The inherited commit, issue, pr, qa, review, and tdd skills originated in portfolio2; see .agents/skills/README.md. Do not assume their package commands, branch names, templates, GitHub checks, or CI integrations apply here. Check this repository's actual files and adapt the affected procedure before using it. Define repository conventions and required templates as part of the project bootstrap.
+
+## Central repository onboarding
+
+- `src/project-document/guidance.ts` owns the shared PROJECT.MD and PROJECT.png maintenance guidance. Document content remains free-form. Initial document/image creation and later updates belong to the source repository; Hub never executes its code or image tools.
+- Check AGENTS.md at the resolved default-branch SHA on every scan, including unchanged collection SHAs. Add or replace only the Hub-managed guidance block; preserve all other bytes. Reject invalid/duplicate markers, symlinks, invalid UTF-8, and oversized files. Skip archived repositories and forks.
+- Propose onboarding through a dedicated branch and PR. Never merge automatically, force-update a ref, rewrite existing instructions, or interpret a PR as document/image creation or API application success. Semantic conflicts require repository-owner review.
+- Deduplicate open onboarding PRs across guideline versions. Respect a closed PR for the same version rather than recreating it on each run. A matching orphaned branch can be reused only if its tree and parent match the current proposal; other branch conflicts fail safely.
+- Keep the discovery App read-only and state writes on the Hub GITHUB_TOKEN. Use a separate organization-installed onboarding writer App with Metadata: read, Contents: write, Pull requests: write. Activate via HUB_ONBOARDING_ENABLED=true and the documented writer credentials. Do not silently continue without writer authentication when explicitly enabled.
+- Onboarding results are aggregate counts only, separate from collection checkpoints and failure history. Do not log private repository identities, existing AGENTS.md bodies, tokens, or raw API errors. A repository failure must not stop remaining repositories; onboarding failure still fails the run after collection state persistence.

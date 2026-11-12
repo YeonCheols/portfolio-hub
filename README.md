@@ -62,3 +62,13 @@ pnpm test
 ```
 
 수집 실패 이력은 `sync-state` 브랜치의 `state/failures/YYYY-MM-DD/failures.json`에 한국 시간 날짜별로 누적하며, 복구 후에도 보존합니다. 저장 항목과 브랜치 보호 정책은 [상태 저장 가이드](docs/sync-state.md)를 따릅니다.
+
+## 프로젝트 문서 입력 계약
+
+프로젝트 소개의 원본은 각 저장소 기본 브랜치 루트의 자유 형식 `PROJECT.MD`입니다. 문서 형식을 강제하지 않으며 각 저장소에서 내용을 갱신합니다. 공통 조회 모듈과 각 프로젝트에 제안할 유지·갱신 지침은 [문서 입력 계약](docs/project-document.md)에 설명합니다. 현재 워크플로에는 AI 실행이나 portfolio-api 쓰기를 추가하지 않습니다.
+
+## 중앙 프로젝트 지침 온보딩
+
+Hub는 각 저장소의 PROJECT.MD·대표 이미지 유지 지침을 중앙 관리하고 동기화 실행 시 지침이 없거나 바뀐 저장소에 AGENTS.md 온보딩 PR을 제안합니다. 기존 지침을 보존하고 열린 PR은 중복 생성하지 않으며 담당자가 직접 머지합니다. 문서와 대표 이미지 생성·갱신은 각 저장소가 담당합니다.
+
+수집 App은 읽기 전용을 유지합니다. 별도 쓰기용 App의 `HUB_ONBOARDING_APP_CLIENT_ID` variable과 `HUB_ONBOARDING_APP_PRIVATE_KEY` secret을 설정한 뒤 `HUB_ONBOARDING_ENABLED=true` variable로 활성화합니다. 설정 전에는 기존 수집만 수행합니다. 권한·중복·실패·재시도 정책과 공통 지침 원본은 [프로젝트 문서 지침](docs/project-document.md#자동-온보딩-pr)을 따릅니다.

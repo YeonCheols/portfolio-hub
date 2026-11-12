@@ -660,3 +660,152 @@ describe("runDiscoveryCli", () => {
     expect(writeError.mock.calls[0][0]).not.toContain("response-secret-value");
   });
 });
+
+it("동일 SHA라도 지침을 확인하고 온보딩 실패는 수집 체크포인트와 분리하며 비공개 정보는 출력하지 않는다", async () => {
+  const records = ["public-fixture", "private-fixture"].map((name, index) => ({
+    repositoryId: index + 1,
+    fullName: `side-projects-labs/${name}`,
+    defaultBranch: "main",
+    lastSuccessfulHeadSha: "a".repeat(40),
+    lastSuccessfulAt: "2026-11-11T00:00:00Z",
+    lastResult: "success" as const,
+    lastErrorCode: null,
+  }));
+  const store = memoryStore({
+    schemaVersion: 1,
+    repositories: Object.fromEntries(
+      records.map((record) => [String(record.repositoryId), record]),
+    ),
+  });
+  const json = (data: unknown, status = 200) =>
+    new Response(JSON.stringify(data), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+  const read = vi.fn<typeof fetch>(async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/repos"))
+      return json(
+        records.map((record, index) => ({
+          id: record.repositoryId,
+          name: record.fullName.split("/")[1],
+          full_name: record.fullName,
+          html_url: `https://github.com/${record.fullName}`,
+          default_branch: "main",
+          visibility: index === 0 ? "public" : "private",
+          archived: false,
+          fork: false,
+          pushed_at: null,
+        })),
+      );
+    if (url.pathname.includes("/commits/"))
+      return json({ sha: "a".repeat(40), tree: { sha: "base-tree" } });
+    if (url.pathname.endsWith("/AGENTS.md"))
+      return json({ message: "Not Found" }, 404);
+    if (url.pathname.endsWith("/git/trees/base-tree"))
+      return json({ truncated: false, tree: [] });
+    throw new Error("수집 본문은 읽지 않습니다");
+  });
+  const writes: string[] = [];
+  const write = vi.fn<typeof fetch>(async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (path.includes("private-fixture"))
+      return json({ message: "private-fixture-token-error" }, 403);
+    if (init?.method === "POST") writes.push(path);
+    if (path.includes("/git/ref/")) return json({ message: "Not Found" }, 404);
+    if (path.endsWith("/pulls") && init?.method !== "POST") return json([]);
+    return json({ sha: "result-sha", number: 1 });
+  });
+  const log = { debug() {}, info() {}, warn() {}, error() {} };
+  const output = vi.fn();
+  const errors = vi.fn();
+  const deps = {
+    token: "read-token",
+    stateStore: store,
+    createClient: () => new Octokit({ request: { fetch: read }, log }),
+    onboardingClient: new Octokit({ request: { fetch: write }, log }),
+    writeOutput: output,
+    writeError: errors,
+  };
+  expect(await runDiscoveryCli(deps)).toBe(1);
+  expect(JSON.parse(output.mock.calls[0][0])).toMatchObject({
+    skippedRepositoryCount: 2,
+    failedRepositoryCount: 0,
+    onboarding: { created: 1, failed: 1 },
+  });
+  expect((await store.load()).repositories).toEqual(
+    Object.fromEntries(
+      records.map((record) => [String(record.repositoryId), record]),
+    ),
+  );
+  expect(writes.filter((path) => path.endsWith("/pulls"))).toHaveLength(1);
+  expect(JSON.stringify([output.mock.calls, errors.mock.calls])).not.toMatch(
+    /private-fixture|token-error|read-token/,
+  );
+});
+
+it("온보딩을 활성화했는데 쓰기용 인증이 없으면 조회나 수집을 시작하지 않는다", async () => {
+  const createClient = vi.fn();
+  const errors = vi.fn();
+  const deps = {
+    token: "read-token",
+    requireOnboarding: true,
+    stateStore: memoryStore(),
+    createClient,
+    writeOutput: vi.fn(),
+    writeError: errors,
+  };
+  expect(await runDiscoveryCli(deps)).toBe(1);
+  expect(createClient).not.toHaveBeenCalled();
+  expect(JSON.parse(errors.mock.calls[0][0]).error.code).toBe(
+    "MISSING_ONBOARDING_TOKEN",
+  );
+});
+
+it("빈 저장소는 온보딩 쓰기를 건너뛰고 기존 빈 저장소 재확인 정책을 유지한다", async () => {
+  const json = (data: unknown, status = 200) =>
+    new Response(JSON.stringify(data), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+  const fetchMock = vi.fn<typeof fetch>(async (input) => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith("/repos"))
+      return json([
+        {
+          id: 1,
+          name: "empty",
+          full_name: "side-projects-labs/empty",
+          html_url: "https://github.com/side-projects-labs/empty",
+          default_branch: "main",
+          visibility: "private",
+          archived: false,
+          fork: false,
+          pushed_at: null,
+        },
+      ]);
+    if (path.includes("/commits/"))
+      return json({ message: "Git Repository is empty" }, 409);
+    throw new Error("빈 저장소 파일을 읽으면 안 됩니다");
+  });
+  const write = vi.fn<typeof fetch>(async () =>
+    json({ message: "unexpected-write" }, 403),
+  );
+  const log = { debug() {}, info() {}, warn() {}, error() {} };
+  const output = vi.fn();
+  expect(
+    await runDiscoveryCli({
+      token: "fake",
+      stateStore: memoryStore(),
+      createClient: () => new Octokit({ request: { fetch: fetchMock }, log }),
+      onboardingClient: new Octokit({ request: { fetch: write }, log }),
+      writeOutput: output,
+      writeError: vi.fn(),
+    }),
+  ).toBe(0);
+  expect(write).not.toHaveBeenCalled();
+  expect(JSON.parse(output.mock.calls[0][0])).toMatchObject({
+    emptyRepositoryCount: 1,
+    onboarding: { skipped: 1, failed: 0 },
+  });
+});

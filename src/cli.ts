@@ -23,11 +23,14 @@ import {
   type RepositoryState,
   type FailureRecord,
 } from "./sync/state.js";
+import { ensureProjectGuidance } from "./project-document/onboarding.js";
 import { createGitHubStateStore } from "./sync/github-state-store.js";
 
 export type DiscoveryCliDependencies = {
   token: string | undefined;
   stateStore: StateStore;
+  requireOnboarding?: boolean;
+  onboardingClient?: Pick<OctokitClient, "request" | "paginate">;
   now?: () => string;
   createClient: (token: string) => Pick<OctokitClient, "paginate" | "request">;
   writeOutput: (message: string) => void;
@@ -51,6 +54,18 @@ export const runDiscoveryCli = async (
     return 1;
   }
 
+  if (dependencies.requireOnboarding && !dependencies.onboardingClient) {
+    writeError(
+      JSON.stringify({
+        error: {
+          code: "MISSING_ONBOARDING_TOKEN",
+          message: "Onboarding writer token is required when enabled",
+        },
+      }),
+    );
+    return 1;
+  }
+
   try {
     const state = await dependencies.stateStore.load().catch(() => {
       throw new StateStorageError();
@@ -64,6 +79,14 @@ export const runDiscoveryCli = async (
       skipped?: boolean;
     })[] = [];
     const failures: FailureRecord[] = [];
+    const onboarding = {
+      created: 0,
+      pending: 0,
+      closed: 0,
+      current: 0,
+      skipped: 0,
+      failed: 0,
+    };
     let projectReadCount = 0;
     let failedRepositoryCount = 0;
     let emptyRepositoryCount = 0;
@@ -89,6 +112,21 @@ export const runDiscoveryCli = async (
       };
       try {
         head = await resolveDefaultBranchHead(client, repository);
+        if (dependencies.onboardingClient && head !== null) {
+          try {
+            const result = await ensureProjectGuidance(
+              client,
+              dependencies.onboardingClient,
+              repository,
+              head,
+            );
+            onboarding[result]++;
+          } catch {
+            onboarding.failed++;
+          }
+        } else if (dependencies.onboardingClient) {
+          onboarding.skipped++;
+        }
         if (previous && shouldSkip(previous, head)) {
           state.repositories[id] = {
             ...previous,
@@ -142,6 +180,7 @@ export const runDiscoveryCli = async (
       JSON.stringify(
         {
           organization: ORGANIZATION,
+          ...(dependencies.onboardingClient ? { onboarding } : {}),
           repositoryCount: repositories.length,
           projectReadCount,
           failedRepositoryCount,
@@ -155,7 +194,7 @@ export const runDiscoveryCli = async (
         2,
       ),
     );
-    return failedRepositoryCount > 0 ? 1 : 0;
+    return failedRepositoryCount > 0 || onboarding.failed > 0 ? 1 : 0;
   } catch (error) {
     const safeError =
       error instanceof GitHubDiscoveryError ||
@@ -203,6 +242,15 @@ if (isDirectExecution) {
     try {
       const exitCode = await runDiscoveryCli({
         token: process.env.HUB_GITHUB_TOKEN,
+        requireOnboarding: process.env.HUB_ONBOARDING_ENABLED === "true",
+        onboardingClient:
+          process.env.HUB_ONBOARDING_ENABLED === "true" &&
+          process.env.HUB_ONBOARDING_TOKEN?.trim()
+            ? new Octokit({
+                auth: process.env.HUB_ONBOARDING_TOKEN,
+                log: silentLogger,
+              })
+            : undefined,
         stateStore: createGitHubStateStore(
           new Octokit({ auth: stateToken, log: silentLogger }),
           stateRepository,
