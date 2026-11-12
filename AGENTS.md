@@ -2,6 +2,15 @@
 
 This repository is being initialized. Read the relevant skill in .agents/skills/<name>/SKILL.md before performing its workflow.
 
+## Project setup
+
+- Runtime: Node.js 24, TypeScript, pnpm 9, Octokit REST API, and Vitest.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm discover` are the repository commands.
+- The GitHub organization is fixed as `side-projects-labs`; repository discovery must use the organization endpoint and paginate every result.
+- The GitHub App and organization installation use `Metadata: read` and `Contents: read` across all repositories, including private/internal repositories. The workflow requests both permissions; current discovery reads only repository metadata, while Contents access prepares for subsequent content ingestion.
+- Do not print tokens, raw GitHub errors, or names and URLs of private/internal repositories to Actions logs. CLI output may include public repository metadata and restricted repository counts.
+- Do not add portfolio-api writes, source content reads, AI generation, or public publishing to repository discovery without the corresponding issue scope.
+
 ## Available skills
 
 - tdd: test-first implementation workflow.

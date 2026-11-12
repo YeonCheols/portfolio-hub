@@ -1,0 +1,42 @@
+name: Discover organization repositories
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: organization-repository-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - uses: actions/create-github-app-token@v3.2.0
+        id: github-app-token
+        with:
+          client-id: ${{ vars.HUB_GITHUB_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HUB_GITHUB_APP_PRIVATE_KEY }}
+          owner: side-projects-labs
+          permission-metadata: read
+          permission-contents: read
+      - name: List organization repositories
+        run: pnpm discover
+        env:
+          HUB_GITHUB_TOKEN: ${{ steps.github-app-token.outputs.token }}
