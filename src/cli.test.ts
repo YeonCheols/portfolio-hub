@@ -979,7 +979,6 @@ it("실제 API 클라이언트와 CLI를 연결해 이미지 없는 문서를 �
       slug: "integration",
       title: "제목",
       description: "설명",
-      image: "",
       stacks: '["TypeScript"]',
       content: "프로젝트 원문",
       linkDemo: null,

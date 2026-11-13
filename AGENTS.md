@@ -57,7 +57,7 @@ The inherited commit, issue, pr, qa, review, and tdd skills originated in portfo
 
 ## Project API application
 
-- Each source repository AI owns the v1 PROJECT.MD metadata and body. Hub validates the fixed schema and sends it unchanged; it never regenerates content or uploads/reads image files. The source may retain PROJECT.png at its root and supplies an optional public image URL. Missing/null/empty image maps to an empty API image string and must not block publication.
+- Each source repository AI owns the v1 PROJECT.MD metadata and body. Hub validates the fixed schema and sends it unchanged; it never regenerates content or uploads/reads image files. The source may retain PROJECT.png at its root and supplies an optional public image URL. Missing/null/empty image must be omitted from API input so an existing image is preserved; new projects default to an empty image. A supplied public URL replaces the image.
 - Use PORTFOLIO_API_URL and ephemeral GitHub OIDC token exchange only when HUB_PROJECT_SYNC_ENABLED=true. Never add fixed API service credentials. Refuse missing/unsafe configuration, preserve secrets in server/Actions context, and never log raw API responses or content. This opt-in call immediately publishes/replaces the specified slug as authorized by the user.
 - Persist applications metadata atomically with collection state on sync-state. Only a verified API response advances the application SHA/time/hash; failures preserve prior successes and retry even if collection already skipped the SHA. Missing PROJECT.MD is pending, not successful application. Keep application errors out of the collection failure history.
 
