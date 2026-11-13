@@ -73,20 +73,16 @@ API 반영은 기존 README·manifest 수집 체크포인트와 분리합니다.
 
 ### 프로젝트 API
 
-Hub 저장소 Actions에 다음을 설정합니다.
+비공개 portfolio-config의 `environments/worker/portfolio-hub/.env`에 다음을 설정합니다.
 
-- Variable `HUB_PROJECT_SYNC_ENABLED=true`
-- Variable `PORTFOLIO_API_URL`: 대상 API의 HTTPS 루트 URL입니다. 정식 API 주소는 `https://api.ycseng.com`입니다. 사용자명·비밀번호·query·fragment·하위 경로가 있는 주소는 거부합니다.
+- `HUB_PROJECT_SYNC_ENABLED=true`
+- `PORTFOLIO_API_URL`: 대상 API의 HTTPS 루트 URL입니다. 정식 API 주소는 `https://api.ycseng.com`입니다. 사용자명·비밀번호·query·fragment·하위 경로가 있는 주소는 거부합니다.
 - 워크플로 권한 `id-token: write`: GitHub가 실행 신원을 서명한 OIDC JWT를 발급합니다. 별도 서비스 ID·Secret은 사용하지 않습니다.
 
 API는 기존 `AUTH_ISSUER`와 서명 키를 사용하며 audience는 API origin(`https://api.ycseng.com`)입니다. GitHub의 RS256 서명·issuer·audience·만료와 저장소 소유자 ID `91575756`(`YeonCheols`)를 검증합니다. 같은 소유자의 모든 저장소 워크플로를 허용하며 수집 대상 조직 이름과는 구분합니다. Hub는 `POST /auth/token`에 token-exchange grant와 GitHub OIDC JWT를 form으로 보내 15분 `project:write` access token을 발급받고 `PUT /service/project`를 호출합니다. refresh token이나 고정 서비스 토큰은 없습니다. 토큰은 runner 임시 파일(0600)에만 쓰고 성공·실패와 무관하게 종료 단계에서 `/auth/oauth/revoke`의 access token 폐기 후 삭제합니다. 강제 종료·폐기 실패 시에도 15분 만료가 적용됩니다. 토큰·요청 본문·응답 원문은 로그·공개 상태·artifact에 남기지 않으며 Actions 토큰은 마스킹합니다. 리디렉션을 따라가지 않고 각 요청에 제한 시간을 적용합니다.
 
 ### 온보딩 PR
 
-수집 App은 계속 `Metadata: read`, `Contents: read`를 사용합니다. 조직에 별도 쓰기용 App을 설치하고 대상 저장소에 `Metadata: read`, `Contents: write`, `Pull requests: write`를 허용합니다.
+같은 조직 App에 `Metadata: read`, `Contents: write`, `Pull requests: write`를 승인하고 config에 `HUB_GITHUB_APP_CLIENT_ID`, `HUB_GITHUB_APP_PRIVATE_KEY`, `HUB_ONBOARDING_ENABLED=true`를 설정합니다. 별도 온보딩 App ID·키는 관리하지 않습니다.
 
-- Variable `HUB_ONBOARDING_APP_CLIENT_ID`
-- Secret `HUB_ONBOARDING_APP_PRIVATE_KEY`
-- Variable `HUB_ONBOARDING_ENABLED=true`
-
-워크플로가 별도 설치 토큰을 만들어 `HUB_ONBOARDING_TOKEN`으로 주입합니다. 기존 수집 App을 쓰기 권한으로 승격하지 않습니다. 실제 App 설정·API OIDC 지원 배포 및 동기화 활성화 전에는 자동 PR이나 프로젝트 API 반영이 실행되지 않습니다.
+워크플로는 수집용 설치 토큰에 읽기 권한만 요청하고, 온보딩용 설치 토큰에는 쓰기 권한을 요청해 `HUB_ONBOARDING_TOKEN`으로 전달합니다. App 키와 정적 값은 config가 소유하며, Actions에는 config를 읽는 `PORTFOLIO_CONFIG_READ_TOKEN` Secret만 남깁니다. App 자체 권한을 바꾼 뒤에는 조직 설치의 권한 변경도 승인해야 합니다. 지침 PR의 머지는 수동으로 진행합니다.
