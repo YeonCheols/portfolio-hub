@@ -21,8 +21,6 @@ jobs:
   discover:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      PORTFOLIO_API_URL: ${{ vars.PORTFOLIO_API_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -37,44 +35,60 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Install pinned portfolio-config CLI
+        env:
+          GH_TOKEN: ${{ secrets.PORTFOLIO_CONFIG_READ_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cli_version=0.3.0
+          cli_dir="$RUNNER_TEMP/portfolio-config-bin"
+          mkdir -p "$cli_dir"
+          gh api "repos/YeonCheols/portfolio-config/contents/scripts/install.sh?ref=cli-v$cli_version" --header 'Accept: application/vnd.github.raw+json' > "$cli_dir/install.sh"
+          bash "$cli_dir/install.sh" "cli-v$cli_version" "$cli_dir"
+          echo "$cli_dir" >> "$GITHUB_PATH"
+      - name: Load central worker configuration
+        env:
+          GH_TOKEN: ${{ secrets.PORTFOLIO_CONFIG_READ_TOKEN }}
+        run: portfolio-config run --app portfolio-hub --inherit-env -- pnpm exec tsx src/config/workflow-config.ts
       - uses: actions/create-github-app-token@v3.2.0
         id: github-app-token
         with:
-          client-id: ${{ vars.HUB_GITHUB_APP_CLIENT_ID }}
-          private-key: ${{ secrets.HUB_GITHUB_APP_PRIVATE_KEY }}
+          client-id: ${{ env.HUB_GITHUB_APP_CLIENT_ID }}
+          private-key: ${{ env.HUB_GITHUB_APP_PRIVATE_KEY }}
           owner: side-projects-labs
           permission-metadata: read
           permission-contents: read
-      - name: Create separate onboarding writer token
-        if: vars.HUB_ONBOARDING_ENABLED == 'true'
+      - name: Create onboarding writer token
+        if: env.HUB_ONBOARDING_ENABLED == 'true'
         uses: actions/create-github-app-token@v3.2.0
         id: onboarding-app-token
         with:
-          client-id: ${{ vars.HUB_ONBOARDING_APP_CLIENT_ID }}
-          private-key: ${{ secrets.HUB_ONBOARDING_APP_PRIVATE_KEY }}
+          client-id: ${{ env.HUB_GITHUB_APP_CLIENT_ID }}
+          private-key: ${{ env.HUB_GITHUB_APP_PRIVATE_KEY }}
           owner: side-projects-labs
           permission-metadata: read
           permission-contents: write
           permission-pull-requests: write
       - name: Report disabled repository onboarding
-        if: vars.HUB_ONBOARDING_ENABLED != 'true'
-        run: echo "Repository onboarding is disabled; configure the separate writer App to enable it."
+        if: env.HUB_ONBOARDING_ENABLED != 'true'
+        run: echo "Repository onboarding is disabled; enable it in portfolio-config."
       - name: Report disabled project API sync
-        if: vars.HUB_PROJECT_SYNC_ENABLED != 'true'
+        if: env.HUB_PROJECT_SYNC_ENABLED != 'true'
         run: echo "Project API sync is disabled; enable HUB_PROJECT_SYNC_ENABLED to use GitHub OIDC."
       - name: Exchange GitHub OIDC for portfolio access token
-        if: vars.HUB_PROJECT_SYNC_ENABLED == 'true'
+        if: env.HUB_PROJECT_SYNC_ENABLED == 'true'
         run: pnpm exec tsx src/portfolio-api/workflow-auth.ts issue
       - name: Read default-branch project information
         run: pnpm discover
         env:
-          HUB_PROJECT_SYNC_ENABLED: ${{ vars.HUB_PROJECT_SYNC_ENABLED }}
-          PORTFOLIO_API_URL: ${{ vars.PORTFOLIO_API_URL }}
-          HUB_ONBOARDING_ENABLED: ${{ vars.HUB_ONBOARDING_ENABLED }}
+          HUB_PROJECT_SYNC_ENABLED: ${{ env.HUB_PROJECT_SYNC_ENABLED }}
+          PORTFOLIO_API_URL: ${{ env.PORTFOLIO_API_URL }}
+          HUB_ONBOARDING_ENABLED: ${{ env.HUB_ONBOARDING_ENABLED }}
           HUB_ONBOARDING_TOKEN: ${{ steps.onboarding-app-token.outputs.token }}
           HUB_GITHUB_TOKEN: ${{ steps.github-app-token.outputs.token }}
           HUB_STATE_TOKEN: ${{ github.token }}
           HUB_STATE_REPOSITORY: ${{ github.repository }}
       - name: Revoke portfolio access token
-        if: ${{ always() && vars.HUB_PROJECT_SYNC_ENABLED == 'true' }}
+        if: ${{ always() && env.HUB_PROJECT_SYNC_ENABLED == 'true' }}
         run: pnpm exec tsx src/portfolio-api/workflow-auth.ts revoke

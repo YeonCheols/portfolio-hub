@@ -19,14 +19,11 @@
 
 ## GitHub App 설정
 
-GitHub App을 `side-projects-labs` Organization의 전체 저장소에 설치하고 Repository permissions에 `Metadata: read-only`와 `Contents: read-only`를 부여합니다. 두 권한은 저장소 목록 및 기본 브랜치 파일 조회에 사용합니다.
+GitHub App을 `side-projects-labs` Organization의 전체 저장소에 설치하고 `Metadata: read`, `Contents: write`, `Pull requests: write`를 승인합니다. 같은 App에서 수집용 읽기 토큰과 온보딩용 쓰기 토큰을 별도로 발급합니다. 수집 토큰은 계속 `metadata: read`, `contents: read`만 명시적으로 요청합니다.
 
-App 등록 권한을 변경한 뒤에는 Organization의 설치 설정에서도 새 권한을 승인해야 합니다. 워크플로는 설치 토큰에 `metadata: read`와 `contents: read`를 명시적으로 요청하므로 승인 전에는 토큰 발급이 실패할 수 있습니다.
+정적 설정은 비공개 `portfolio-config`의 `environments/worker/portfolio-hub/.env` 한 파일에서 관리하며 개발·운영 환경을 나누지 않습니다. Hub Actions에는 최초 조회용 Secret `PORTFOLIO_CONFIG_READ_TOKEN`만 등록합니다. 이 토큰은 `YeonCheols/portfolio-config`의 Contents: read 권한으로 설정과 CLI 릴리스 파일을 읽으며 다음 단계에 넘기지 않습니다.
 
-`portfolio-hub` 저장소 Actions 설정에 다음 값을 등록합니다.
-
-- Repository variable `HUB_GITHUB_APP_CLIENT_ID`: GitHub App Client ID입니다.
-- Repository secret `HUB_GITHUB_APP_PRIVATE_KEY`: GitHub App private key 원문입니다.
+워크플로는 체크섬을 확인해 `cli-v0.3.0`을 설치한 뒤 `portfolio-config run --app portfolio-hub --inherit-env`로 설정 전달기를 실행합니다. App ID·Private Key·기능 활성화 값·API URL은 중앙 설정에서 공급하고 App 키는 로그에서 마스킹합니다. 별도 Actions Variables나 중복 App 키 Secret은 사용하지 않습니다.
 
 워크플로는 실행할 때 설치 토큰을 발급하고 job 종료 시 폐기합니다. 공개 저장소이므로 private key, 토큰, 비공개 저장소의 이름과 URL을 로그에 출력하지 않습니다.
 
@@ -71,14 +68,16 @@ pnpm test
 
 Hub는 각 저장소의 PROJECT.MD·대표 이미지 유지 지침을 중앙 관리하고 동기화 실행 시 지침이 없거나 바뀐 저장소에 AGENTS.md 온보딩 PR을 제안합니다. 기존 지침을 보존하고 열린 PR은 중복 생성하지 않으며 담당자가 직접 머지합니다. 문서와 대표 이미지 생성·갱신은 각 저장소가 담당합니다.
 
-수집 App은 읽기 전용을 유지합니다. 별도 쓰기용 App의 `HUB_ONBOARDING_APP_CLIENT_ID` variable과 `HUB_ONBOARDING_APP_PRIVATE_KEY` secret을 설정한 뒤 `HUB_ONBOARDING_ENABLED=true` variable로 활성화합니다. 설정 전에는 기존 수집만 수행합니다. 권한·중복·실패·재시도 정책과 공통 지침 원본은 [프로젝트 문서 지침](docs/project-document.md#자동-온보딩-pr)을 따릅니다.
+config에서 `HUB_ONBOARDING_ENABLED=true`로 활성화하면 같은 App으로 Contents: write·Pull requests: write 설치 토큰을 별도 발급합니다. false면 기존 수집만 수행합니다. 권한·중복·실패·재시도 정책과 공통 지침 원본은 [프로젝트 문서 지침](docs/project-document.md#자동-온보딩-pr)을 따릅니다.
 
 ## 프로젝트 API 연결
 
 각 저장소의 PROJECT.MD 첫 JSON 블록에서 제목·설명·slug·스택과 선택적인 공개 이미지 URL·링크를 읽고, 아래 마크다운을 본문으로 그대로 전송합니다. 공개 이미지 URL이 없으면 이미지 없이 등록합니다. Hub의 AI 생성·이미지 업로드는 없습니다.
 
-`HUB_PROJECT_SYNC_ENABLED=true`, `PORTFOLIO_API_URL=https://api.ycseng.com` variables를 설정하면 워크플로가 GitHub OIDC로 15분 access token을 발급받아 `PUT /service/project`를 호출합니다. 별도 서비스 ID·Secret이나 고정 서비스 토큰은 필요하지 않습니다. API는 GitHub 서명·issuer·audience·만료와 저장소 소유자 `YeonCheols`의 고정 ID(`91575756`)를 검증합니다. 같은 소유자의 모든 저장소 워크플로를 허용하는 정책이며 수집 대상 조직과는 구분합니다. API 반영 성공 SHA는 수집 SHA와 분리해 저장하므로 저장 실패를 다음 실행에서 재시도합니다. 문서가 없으면 반영 대기하며 기존 포트폴리오 항목을 삭제하지 않습니다. API 반영은 즉시 공개되고 관리자 편집 내용도 교체합니다.
+config에 `HUB_PROJECT_SYNC_ENABLED=true`, `PORTFOLIO_API_URL=https://api.ycseng.com`을 설정하면 워크플로가 GitHub OIDC로 15분 access token을 발급받아 `PUT /service/project`를 호출합니다. 별도 서비스 ID·Secret이나 고정 서비스 토큰은 필요하지 않습니다. API는 GitHub 서명·issuer·audience·만료와 저장소 소유자 `YeonCheols`의 고정 ID(`91575756`)를 검증합니다. 같은 소유자의 모든 저장소 워크플로를 허용하는 정책이며 수집 대상 조직과는 구분합니다. API 반영 성공 SHA는 수집 SHA와 분리해 저장하므로 저장 실패를 다음 실행에서 재시도합니다. 문서가 없으면 반영 대기하며 기존 포트폴리오 항목을 삭제하지 않습니다. API 반영은 즉시 공개되고 관리자 편집 내용도 교체합니다.
 
 문서 예시·선택 이미지·초기 설정·재시도 계약은 [프로젝트 문서 계약](docs/project-document.md)을 따릅니다.
 
 토큰은 `$RUNNER_TEMP`의 권한 0600 임시 파일에만 보관합니다. 워크플로 종료 단계는 성공·실패와 관계없이 API 토큰 폐기를 시도한 뒤 파일을 삭제합니다. 강제 종료나 폐기 요청 실패 시에도 15분 만료가 적용됩니다. 토큰을 공개 `sync-state`, 캐시, artifact, 정적 설정에 저장하지 않습니다. GitHub OIDC와 API access token은 Actions 로그에서 마스킹합니다. API의 OIDC 교환·폐기 지원을 먼저 배포한 뒤 Hub 동기화를 활성화합니다.
+
+중앙 설정 이관 순서는 config 변경 머지 → `cli-v0.3.0` 릴리스 성공 확인 → Hub 변경 머지 → 워크플로 실행 확인 → 이전 `HUB_GITHUB_APP_CLIENT_ID`, `HUB_GITHUB_APP_PRIVATE_KEY`, `HUB_ONBOARDING_ENABLED`, `HUB_PROJECT_SYNC_ENABLED`, `PORTFOLIO_API_URL` Actions 설정 삭제입니다. 이전 워크플로가 이 값을 사용 중일 때 먼저 삭제하지 않습니다.
