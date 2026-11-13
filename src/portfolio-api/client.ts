@@ -3,7 +3,7 @@ export type ProjectPayload = {
   slug: string;
   title: string;
   description: string;
-  image: string;
+  image?: string;
   stacks: string;
   content: string;
   linkDemo?: string | null;
@@ -54,7 +54,7 @@ export const createPortfolioApiClient = (options: PortfolioApiOptions) => {
   const request = options.fetch ?? fetch;
   return {
     targetHash: createHash("sha256")
-      .update(`project-contract-v1:${baseUrl}`)
+      .update(`project-contract-v1-preserve-image:${baseUrl}`)
       .digest("hex"),
     upsert: async (payload: ProjectPayload): Promise<PortfolioApiResult> => {
       try {

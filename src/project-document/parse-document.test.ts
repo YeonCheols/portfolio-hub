@@ -15,13 +15,12 @@ const document = (
 ) => `\`\`\`json\n${JSON.stringify(value)}\n\`\`\`\n\n${content}`;
 
 describe("PROJECT.MD 고정 입력 규격", () => {
-  it("JSON 메타데이터와 본문을 그대로 API 입력으로 변환하고 이미지 URL이 없으면 빈 문자열을 제공한다", () => {
+  it("JSON 메타데이터와 본문을 그대로 API 입력으로 변환하고 이미지 URL이 없으면 이미지 갱신 필드를 보내지 않는다", () => {
     expect(parseProjectDocument(document())).toEqual({
       slug: "fixture",
       title: "프로젝트",
       description: "설명",
       stacks: '["TypeScript","Node.js"]',
-      image: "",
       content: "# 소개\n\n프로젝트 본문입니다.\n",
       linkDemo: null,
       linkGithub: metadata.linkGithub,
@@ -66,4 +65,12 @@ it("각 저장소에 배포하는 지침의 JSON 예시가 실제 파서 규격�
     image: "https://example.com/public-project.png",
     content: "소개입니다.",
   });
+});
+
+it("이미지 생략·null·빈 문자열은 업데이트 필드에서 제외한다", () => {
+  for (const image of [undefined, null, ""]) {
+    expect(
+      parseProjectDocument(document({ ...metadata, image })),
+    ).not.toHaveProperty("image");
+  }
 });

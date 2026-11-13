@@ -53,12 +53,12 @@ export const parseProjectDocument = (markdown: string): ProjectPayload => {
         throw new ProjectContractError();
       return input;
     };
-    const image = link(value.image) ?? "";
+    const image = link(value.image);
     return {
       slug: value.slug,
       title: value.title,
       description: value.description,
-      image,
+      ...(image === null ? {} : { image }),
       stacks: JSON.stringify(value.stacks),
       content: match[2],
       linkDemo: link(value.linkDemo),

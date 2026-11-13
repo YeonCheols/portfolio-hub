@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { createPortfolioApiClient } from "./client.js";
 
@@ -80,4 +81,11 @@ it("안전하지 않은 API 주소와 빈 토큰은 요청 전에 거부한다",
     expect(() => createPortfolioApiClient({ ...options, accessToken })).toThrow(
       "Portfolio API operation failed",
     );
+});
+
+it("이미지 보존 정책 전환 시 이전 계약의 성공 체크포인트를 다시 평가한다", () => {
+  const legacyHash = createHash("sha256")
+    .update("project-contract-v1:https://api.invalid")
+    .digest("hex");
+  expect(createPortfolioApiClient(options).targetHash).not.toBe(legacyHash);
 });

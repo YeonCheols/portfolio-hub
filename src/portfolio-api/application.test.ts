@@ -64,7 +64,10 @@ describe("프로젝트 API 반영", () => {
       },
     });
     expect(publisher.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ image: "", content: "원문입니다.\n" }),
+      expect.objectContaining({ content: "원문입니다.\n" }),
+    );
+    expect(publisher.upsert).toHaveBeenCalledWith(
+      expect.not.objectContaining({ image: expect.anything() }),
     );
     expect(JSON.stringify(first.state)).not.toMatch(
       /원문|TypeScript|제목|access_token/,
