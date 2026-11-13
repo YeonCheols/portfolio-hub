@@ -14,7 +14,7 @@ const document = (
   content = "# 소개\n\n프로젝트 본문입니다.\n",
 ) => `\`\`\`json\n${JSON.stringify(value)}\n\`\`\`\n\n${content}`;
 
-describe("PROJECT.MD 고정 입력 규격", () => {
+describe("PROJECT.md 고정 입력 규격", () => {
   it("JSON 메타데이터와 본문을 그대로 API 입력으로 변환하고 이미지 URL이 없으면 이미지 갱신 필드를 보내지 않는다", () => {
     expect(parseProjectDocument(document())).toEqual({
       slug: "fixture",

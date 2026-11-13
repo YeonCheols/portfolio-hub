@@ -14,9 +14,9 @@ This repository is being initialized. Read the relevant skill in .agents/skills/
 
 ## Project document contract
 
-- Use the default branch root `PROJECT.MD` as the canonical project document. The user-authorized v1 contract uses a leading JSON code block for schemaVersion/slug/title/description/stacks and optional public image/demo/GitHub URLs, followed by a free-form Markdown body. Follow docs/project-document.md; do not require body headings or regenerate its content in Hub. Project-specific document creation remains owned by each repository; AI can supplement the document as a supporting stage.
-- Read through `src/project-document/read-document.ts` at an already resolved HEAD SHA. Preserve source metadata and markdown without logging or persisting bodies. Do not substitute README or treat document collection as API application success. The user-authorized onboarding exception may propose AGENTS.md changes through a dedicated branch and a manually merged PR; never directly update a source default branch, PROJECT.MD, or image.
-- Follow `docs/project-document.md` for the shared maintenance guideline to propose in each repository's AGENTS.md. Maintain and update PROJECT.MD when project content changes without imposing a common content template.
+- Use the default branch root `PROJECT.md` as the canonical project document. The user-authorized v1 contract uses a leading JSON code block for schemaVersion/slug/title/description/stacks and optional public image/demo/GitHub URLs, followed by a free-form Markdown body. Follow docs/project-document.md; do not require body headings or regenerate its content in Hub. Project-specific document creation remains owned by each repository; AI can supplement the document as a supporting stage.
+- Read through `src/project-document/read-document.ts` at an already resolved HEAD SHA. Preserve source metadata and markdown without logging or persisting bodies. Do not substitute README or treat document collection as API application success. The user-authorized onboarding exception may propose AGENTS.md changes through a dedicated branch and a manually merged PR; never directly update a source default branch, PROJECT.md, or image.
+- Follow `docs/project-document.md` for the shared maintenance guideline to propose in each repository's AGENTS.md. Maintain and update PROJECT.md when project content changes without imposing a common content template.
 - The document reader scope stops at the markdown input contract. The user has authorized Hub service authentication and project create/update calls. Use the deployed portfolio-api contract, keep application checkpoints separate from collection, and do not perform AI generation or image upload in Hub.
 
 ## Sync state guide
@@ -48,7 +48,7 @@ The inherited commit, issue, pr, qa, review, and tdd skills originated in portfo
 
 ## Central repository onboarding
 
-- `src/project-document/guidance.ts` owns the shared PROJECT.MD and PROJECT.png maintenance guidance. Metadata follows the v1 JSON contract and the Markdown body remains free-form. Initial document/image creation and later updates belong to the source repository; Hub never executes its code or image tools.
+- `src/project-document/guidance.ts` owns the shared PROJECT.md and PROJECT.png maintenance guidance. Metadata follows the v1 JSON contract and the Markdown body remains free-form. Initial document/image creation and later updates belong to the source repository; Hub never executes its code or image tools.
 - Check AGENTS.md at the resolved default-branch SHA on every scan, including unchanged collection SHAs. Add or replace only the Hub-managed guidance block; preserve all other bytes. Reject invalid/duplicate markers, symlinks, invalid UTF-8, and oversized files. Skip archived repositories and forks.
 - Propose onboarding through a dedicated branch and PR. Never merge automatically, force-update a ref, rewrite existing instructions, or interpret a PR as document/image creation or API application success. Semantic conflicts require repository-owner review.
 - Deduplicate open onboarding PRs across guideline versions. Respect a closed PR for the same version rather than recreating it on each run. A matching orphaned branch can be reused only if its tree and parent match the current proposal; other branch conflicts fail safely.
@@ -57,9 +57,9 @@ The inherited commit, issue, pr, qa, review, and tdd skills originated in portfo
 
 ## Project API application
 
-- Each source repository AI owns the v1 PROJECT.MD metadata and body. Hub validates the fixed schema and sends it unchanged; it never regenerates content or uploads/reads image files. The source may retain PROJECT.png at its root and supplies an optional public image URL. Missing/null/empty image must be omitted from API input so an existing image is preserved; new projects default to an empty image. A supplied public URL replaces the image.
+- Each source repository AI owns the v1 PROJECT.md metadata and body. Hub validates the fixed schema and sends it unchanged; it never regenerates content or uploads/reads image files. The source may retain PROJECT.png at its root and supplies an optional public image URL. Missing/null/empty image must be omitted from API input so an existing image is preserved; new projects default to an empty image. A supplied public URL replaces the image.
 - Use PORTFOLIO_API_URL and ephemeral GitHub OIDC token exchange only when HUB_PROJECT_SYNC_ENABLED=true. Never add fixed API service credentials. Refuse missing/unsafe configuration, preserve secrets in server/Actions context, and never log raw API responses or content. This opt-in call immediately publishes/replaces the specified slug as authorized by the user.
-- Persist applications metadata atomically with collection state on sync-state. Only a verified API response advances the application SHA/time/hash; failures preserve prior successes and retry even if collection already skipped the SHA. Missing PROJECT.MD is pending, not successful application. Keep application errors out of the collection failure history.
+- Persist applications metadata atomically with collection state on sync-state. Only a verified API response advances the application SHA/time/hash; failures preserve prior successes and retry even if collection already skipped the SHA. Missing PROJECT.md is pending, not successful application. Keep application errors out of the collection failure history.
 
 ## Central worker configuration
 

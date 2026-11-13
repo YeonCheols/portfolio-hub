@@ -179,7 +179,7 @@ export const ensureProjectGuidance = async (
       base: repository.defaultBranch,
       head: branch,
       title: "docs: 프로젝트 문서와 대표 이미지 관리 지침을 추가합니다",
-      body: "<!-- portfolio-hub:project-guidance -->\nHub에서 관리하는 공통 지침을 제안합니다. 기존 AGENTS.md를 보존하며 기본 브랜치를 직접 수정하거나 자동 머지하지 않습니다.\n\nPROJECT.MD와 PROJECT.png의 생성·유지는 이 저장소가 담당합니다. 이 PR 자체는 문서·이미지를 생성하지 않습니다. 기존 지침과 충돌 여부 및 공개 가능 정보를 검토한 뒤 직접 머지해 주세요.",
+      body: "<!-- portfolio-hub:project-guidance -->\nHub에서 관리하는 공통 지침을 제안합니다. 기존 AGENTS.md를 보존하며 기본 브랜치를 직접 수정하거나 자동 머지하지 않습니다.\n\nPROJECT.md와 PROJECT.png의 생성·유지는 이 저장소가 담당합니다. 이 PR 자체는 문서·이미지를 생성하지 않습니다. 기존 지침과 충돌 여부 및 공개 가능 정보를 검토한 뒤 직접 머지해 주세요.",
     });
     return "created";
   } catch {

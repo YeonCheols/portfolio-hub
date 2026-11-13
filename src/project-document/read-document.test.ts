@@ -63,7 +63,7 @@ describe("readProjectDocument", () => {
       ).rejects.toMatchObject({ code });
     }
   });
-  it("PROJECT.MD가 없으면 다른 파일로 대체하지 않고 누락 코드만 반환한다", async () => {
+  it("PROJECT.md가 없으면 다른 파일로 대체하지 않고 누락 코드만 반환한다", async () => {
     const mock = vi.fn<typeof fetch>(async () =>
       json({ message: "private repository detail" }, 404),
     );
@@ -72,11 +72,11 @@ describe("readProjectDocument", () => {
     ).rejects.toMatchObject({ code: "PROJECT_DOCUMENT_MISSING" });
     expect(mock).toHaveBeenCalledTimes(1);
   });
-  it("고정 HEAD의 자유 형식 PROJECT.MD를 원문과 출처 그대로 읽는다", async () => {
+  it("고정 HEAD의 자유 형식 PROJECT.md를 원문과 출처 그대로 읽는다", async () => {
     const mock = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(String(input));
       expect(decodeURIComponent(url.pathname)).toBe(
-        "/repos/side-projects-labs/example/contents/PROJECT.MD",
+        "/repos/side-projects-labs/example/contents/PROJECT.md",
       );
       expect(url.searchParams.get("ref")).toBe(head);
       expect(init?.method).toBe("GET");
@@ -95,7 +95,7 @@ describe("readProjectDocument", () => {
         defaultBranch: "stable",
         headSha: head,
         documentSha: sha,
-        path: "PROJECT.MD",
+        path: "PROJECT.md",
       },
       markdown,
     });
