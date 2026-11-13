@@ -850,7 +850,7 @@ it("수집 SHA가 같아도 미반영 문서를 API에 전송하고 실패는 �
         })),
       );
     if (url.pathname.includes("/commits/")) return json({ sha: head });
-    expect(url.pathname.endsWith("/PROJECT.MD")).toBe(true);
+    expect(url.pathname.endsWith("/PROJECT.md")).toBe(true);
     expect(url.searchParams.get("ref")).toBe(head);
     const doc =
       '```json\n{"schemaVersion":1,"slug":"fixture","title":"제목","description":"설명","stacks":[]}\n```\n\n문서 원문 비밀값이 아닌 공개용 소개';
@@ -923,7 +923,7 @@ it("서로 다른 저장소가 같은 slug를 제공하면 두 번째 저장소�
         })),
       );
     if (path.includes("/commits/")) return json({ sha: "a".repeat(40) });
-    if (path.endsWith("/PROJECT.MD"))
+    if (path.endsWith("/PROJECT.md"))
       return json({
         type: "file",
         encoding: "base64",
@@ -1006,7 +1006,7 @@ it("실제 API 클라이언트와 CLI를 연결해 이미지 없는 문서를 �
         },
       ]);
     if (path.includes("/commits/")) return json({ sha: "a".repeat(40) });
-    if (path.endsWith("/PROJECT.MD"))
+    if (path.endsWith("/PROJECT.md"))
       return json({
         type: "file",
         encoding: "base64",

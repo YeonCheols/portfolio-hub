@@ -119,7 +119,7 @@ describe("ensureProjectGuidance", () => {
         },
       ],
     });
-    expect(JSON.stringify(tree.body)).toContain("PROJECT.MD");
+    expect(JSON.stringify(tree.body)).toContain("PROJECT.md");
     expect(JSON.stringify(tree.body)).toContain("PROJECT.png");
     expect(
       writes.find((call) => call.path.endsWith("/git/commits"))?.body.parents,

@@ -23,7 +23,7 @@ export type ProjectDocument = {
     defaultBranch: string;
     headSha: string;
     documentSha: string;
-    path: "PROJECT.MD";
+    path: "PROJECT.md";
   };
   markdown: string;
 };
@@ -38,7 +38,7 @@ export const readProjectDocument = async (
       {
         owner: ORGANIZATION,
         repo: repository.name,
-        path: "PROJECT.MD",
+        path: "PROJECT.md",
         ref: headSha,
       },
     );
@@ -71,7 +71,7 @@ export const readProjectDocument = async (
         defaultBranch: repository.defaultBranch,
         headSha,
         documentSha: data.sha,
-        path: "PROJECT.MD",
+        path: "PROJECT.md",
       },
       markdown,
     };
