@@ -5,8 +5,8 @@
       "repositoryId": 1454663289,
       "fullName": "side-projects-labs/portfolio-admin",
       "defaultBranch": "master",
-      "lastSuccessfulHeadSha": "5c2956bcadf2cd169dee66df1535f23b63572e51",
-      "lastSuccessfulAt": "2026-11-13T01:46:48.642Z",
+      "lastSuccessfulHeadSha": "8ed65cc97d6e80c4f3d2dfdcd59b48b24dab6f71",
+      "lastSuccessfulAt": "2026-11-13T04:29:42.706Z",
       "lastResult": "success",
       "lastErrorCode": null
     }
@@ -14,13 +14,13 @@
   "applications": {
     "1454663289": {
       "repositoryId": 1454663289,
-      "slug": null,
-      "targetHash": "699cb4d240471cc74625b6b14e0c0f2dacb28e88d28327790768349c53c34aee",
-      "lastSuccessfulHeadSha": null,
-      "lastSuccessfulAt": null,
-      "payloadHash": null,
-      "lastResult": "pending",
-      "lastErrorCode": "PROJECT_DOCUMENT_MISSING"
+      "slug": "portfolio-admin",
+      "targetHash": "e40515394a06ff2074fec48e60b675b01b839d4dbc4bd0a9eb807425a1706829",
+      "lastSuccessfulHeadSha": "8ed65cc97d6e80c4f3d2dfdcd59b48b24dab6f71",
+      "lastSuccessfulAt": "2026-11-13T04:29:42.155Z",
+      "payloadHash": "849b818038a84b37fe4b208f013a2bd91a2ca6c3956f5c16aa830058e4d2f9c2",
+      "lastResult": "success",
+      "lastErrorCode": null
     }
   }
 }
