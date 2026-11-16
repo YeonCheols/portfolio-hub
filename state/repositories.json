@@ -23,8 +23,8 @@
       "repositoryId": 1195787442,
       "fullName": "side-projects-labs/jobs-scrap",
       "defaultBranch": "master",
-      "lastSuccessfulHeadSha": "ca6a1a512fa5a85af3c6a0f5aa50449c8f02d933",
-      "lastSuccessfulAt": "2026-11-16T05:46:24.955Z",
+      "lastSuccessfulHeadSha": "2617d99b1a3db92dbb1569c885685e2f265d75bc",
+      "lastSuccessfulAt": "2026-11-16T09:25:34.117Z",
       "lastResult": "success",
       "lastErrorCode": null
     },
@@ -70,13 +70,13 @@
     },
     "1195787442": {
       "repositoryId": 1195787442,
-      "slug": null,
+      "slug": "jobs-scrap",
       "targetHash": "e40515394a06ff2074fec48e60b675b01b839d4dbc4bd0a9eb807425a1706829",
-      "lastSuccessfulHeadSha": null,
-      "lastSuccessfulAt": null,
-      "payloadHash": null,
-      "lastResult": "pending",
-      "lastErrorCode": "PROJECT_DOCUMENT_MISSING"
+      "lastSuccessfulHeadSha": "2617d99b1a3db92dbb1569c885685e2f265d75bc",
+      "lastSuccessfulAt": "2026-11-16T09:25:33.567Z",
+      "payloadHash": "576f92d86e0075bf09bf3aac0be33647c502597a23f6a5ff6eecf6b76e185dec",
+      "lastResult": "success",
+      "lastErrorCode": null
     },
     "1195903289": {
       "repositoryId": 1195903289,
