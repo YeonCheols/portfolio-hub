@@ -35,7 +35,7 @@ GitHub App을 `side-projects-labs` Organization의 전체 저장소에 설치하
 
 GitHub Actions의 **Discover organization repositories** 워크플로는 다음 조건으로 실행합니다.
 
-- 매일 한국 시간 00:00, 02:00부터 22:00까지 2시간마다 실행합니다. GitHub의 UTC cron 표현식은 `0 1-23/2 * * *`입니다.
+- 매시간 17분에 예약 실행합니다. GitHub의 UTC cron 표현식은 `17 * * * *`이며 한국 시간도 매시간 17분입니다. GitHub Actions 부하에 따라 실제 실행은 지연되거나 누락될 수 있습니다.
 - Hub 저장소의 `master` 브랜치에 push되면 자동 실행합니다. 다른 사이드 프로젝트 저장소의 push는 예약 실행 때 반영합니다.
 - Actions 화면에서 수동 실행할 수도 있습니다.
 

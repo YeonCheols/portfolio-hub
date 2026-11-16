@@ -6,8 +6,8 @@ on:
     branches:
       - master
   schedule:
-    # GitHub cron uses UTC; odd UTC hours are even hours in Asia/Seoul.
-    - cron: "0 1-23/2 * * *"
+    # Run hourly at minute 17 to avoid the start-of-hour scheduling peak.
+    - cron: "17 * * * *"
 
 permissions:
   contents: write
