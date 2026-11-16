@@ -32,8 +32,8 @@
       "repositoryId": 1195903289,
       "fullName": "side-projects-labs/jobs-scrap-dashboard",
       "defaultBranch": "master",
-      "lastSuccessfulHeadSha": "69dcb77dd040bc4d2a285e6ea2c436336d3b828a",
-      "lastSuccessfulAt": "2026-11-16T05:46:29.581Z",
+      "lastSuccessfulHeadSha": "5b76256ab46a63277dd2cf3c5c941ca5915354ee",
+      "lastSuccessfulAt": "2026-11-16T14:35:44.544Z",
       "lastResult": "success",
       "lastErrorCode": null
     },
@@ -80,13 +80,13 @@
     },
     "1195903289": {
       "repositoryId": 1195903289,
-      "slug": null,
+      "slug": "jobs-scrap-dashboard",
       "targetHash": "e40515394a06ff2074fec48e60b675b01b839d4dbc4bd0a9eb807425a1706829",
-      "lastSuccessfulHeadSha": null,
-      "lastSuccessfulAt": null,
-      "payloadHash": null,
-      "lastResult": "pending",
-      "lastErrorCode": "PROJECT_DOCUMENT_MISSING"
+      "lastSuccessfulHeadSha": "5b76256ab46a63277dd2cf3c5c941ca5915354ee",
+      "lastSuccessfulAt": "2026-11-16T14:35:43.734Z",
+      "payloadHash": "71b10d889e034c1906a55ac0289f882373791ba4403798aa60aa751776d995f5",
+      "lastResult": "success",
+      "lastErrorCode": null
     },
     "1454663289": {
       "repositoryId": 1454663289,
