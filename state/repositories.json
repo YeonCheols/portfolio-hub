@@ -77,8 +77,8 @@
       "repositoryId": 1468699922,
       "fullName": "side-projects-labs/portfolio-chat",
       "defaultBranch": "master",
-      "lastSuccessfulHeadSha": "8c57c5022df6905578c250f5d79cf06b5dc17af7",
-      "lastSuccessfulAt": "2026-11-24T15:51:44.246Z",
+      "lastSuccessfulHeadSha": "363c36c2b09de42c5edfdc40c509218762ea20cc",
+      "lastSuccessfulAt": "2026-11-25T09:50:58.272Z",
       "lastResult": "success",
       "lastErrorCode": null
     }
@@ -166,13 +166,13 @@
     },
     "1468699922": {
       "repositoryId": 1468699922,
-      "slug": null,
+      "slug": "portfolio-chat",
       "targetHash": "e40515394a06ff2074fec48e60b675b01b839d4dbc4bd0a9eb807425a1706829",
-      "lastSuccessfulHeadSha": null,
-      "lastSuccessfulAt": null,
-      "payloadHash": null,
-      "lastResult": "pending",
-      "lastErrorCode": "PROJECT_DOCUMENT_MISSING"
+      "lastSuccessfulHeadSha": "363c36c2b09de42c5edfdc40c509218762ea20cc",
+      "lastSuccessfulAt": "2026-11-25T09:50:57.543Z",
+      "payloadHash": "875ecba4250a26596827e25dea612a0a85ad33e1992e34f258e6d6e70ac4b493",
+      "lastResult": "success",
+      "lastErrorCode": null
     }
   }
 }
